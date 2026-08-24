@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
-import colorsys
 import math
 
 from PIL import Image, ImageStat
@@ -37,11 +36,6 @@ class ImageFeatures:
     colors: tuple[ColorSample, ...]
 
 
-def _rgb_to_hsv(rgb: tuple[int, int, int]) -> tuple[float, float, float]:
-    r, g, b = (value / 255.0 for value in rgb)
-    return colorsys.rgb_to_hsv(r, g, b)
-
-
 def _iter_pixels(image: Image.Image) -> Iterable[tuple[int, int, int]]:
     return image.getdata()
 
@@ -69,14 +63,19 @@ def extract_features(path: str | Path) -> ImageFeatures:
         image = source.convert("RGB")
         image.thumbnail(ANALYSIS_SIZE, Image.Resampling.LANCZOS)
         pixels = list(_iter_pixels(image))
+        # Let Pillow's native implementation handle RGB -> HSV instead of
+        # calling colorsys.rgb_to_hsv once per pixel in Python.
+        hsv_values = list(image.convert("HSV").getdata())
 
     if not pixels:
         raise ValueError(f"Image contains no pixels: {image_path}")
 
     count = len(pixels)
     avg = tuple(round(sum(pixel[channel] for pixel in pixels) / count) for channel in range(3))
-    hsv_values = [_rgb_to_hsv(pixel) for pixel in pixels]
-    avg_hsv = tuple(sum(value[index] for value in hsv_values) / count for index in range(3))
+    avg_hsv = tuple(
+        sum(value[channel] / 255.0 for value in hsv_values) / count
+        for channel in range(3)
+    )
 
     brightness = avg_hsv[2]
     saturation = avg_hsv[1]
@@ -85,7 +84,10 @@ def extract_features(path: str | Path) -> ImageFeatures:
     contrast = math.sqrt(sum((value - mean_luminance) ** 2 for value in luminances)) / 255.0
 
     warm = cool = grayscale = dark = light = 0
-    for hue, sat, value in hsv_values:
+    for hue_byte, sat_byte, value_byte in hsv_values:
+        hue = hue_byte / 255.0
+        sat = sat_byte / 255.0
+        value = value_byte / 255.0
         if sat < 0.18:
             grayscale += 1
         if value < 0.25:
