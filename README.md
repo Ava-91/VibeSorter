@@ -1,35 +1,54 @@
 # VibeSorter
 
-A local, lightweight image organizer that detects visual aesthetics, colors, moods, and vibes — without sending images to a cloud AI service.
+> **Find the vibe of your image library.**
+>
+> VibeSorter is a local-first Python CLI that analyzes the visual character of images and groups them into aesthetic categories such as **Soft / Pastel**, **Dark / Moody**, **Retro Blue**, and **Black & White**.
 
-## Current phase: vibe detection
+It is built for people with *way too many pictures* who want to understand the visual mood of a collection before deciding how to organize it.
 
-VibeSorter is deliberately focused on **visual vibe detection** for now. It does not try to understand text, OCR screenshots, or identify the subject of an image. Text-heavy images can be left for a future phase.
+## ✨ What is the idea?
 
-The detector uses lightweight local image features such as color, brightness, saturation, contrast, warm/cool balance, grayscale content, and dark/light ratios.
+VibeSorter is not trying to be another generic photo manager.
 
-### Vibe categories
+The core idea is **visual-aesthetic organization**: instead of asking *"What is in this image?"*, it asks *"What does this image look and feel like?"*
 
-- Retro Blue
-- Red / Warm
-- Green & Black
-- Black & White
-- Soft / Pastel
-- Dark / Moody
-- Bright / Colorful
+For example, a large mixed folder might naturally turn into:
 
-### Supported images
+- 🎀 **Soft / Pastel** — pale, gentle, low-contrast imagery
+- 🖤 **Dark / Moody** — dark, dramatic, low-light imagery
+- 💙 **Retro Blue** — cool, blue-heavy imagery
+- ❤️ **Red / Warm** — warm and red/orange-heavy imagery
+- 🌓 **Black & White** — grayscale-dominant imagery
+- 💚 **Green & Black** — green-heavy dark imagery
+- 🌈 **Bright / Colorful** — vivid, high-saturation imagery
 
-- JPEG / JPG
-- PNG
-- WebP
-- BMP
-- GIF
-- TIFF
+These are **visual vibes, not semantic labels**. VibeSorter currently does not try to read text, understand screenshots, recognize people, or determine what an image is about.
 
-The scanner searches subfolders by default and treats extensions case-insensitively.
+## 🚀 Why does this exist?
 
-## CLI
+Because image libraries get ridiculous.
+
+You might have thousands of screenshots, saved posts, wallpapers, artwork, memes, references, and random pictures scattered across folders. Manually sorting them by aesthetic is boring, while a cloud AI service is overkill for something that can be estimated from local visual features.
+
+VibeSorter is an experiment in making that process **fast, local, explainable, and eventually useful**.
+
+## 🧠 How it works
+
+The current detector uses lightweight image features including:
+
+- brightness
+- saturation
+- contrast
+- warm/cool balance
+- grayscale content
+- dark/light ratios
+- dominant color characteristics
+
+It runs locally with Pillow and can analyze multiple images concurrently.
+
+There is intentionally **no cloud AI API required** for the current detector.
+
+## 📦 Installation
 
 Python 3.10+ is required.
 
@@ -37,54 +56,112 @@ Python 3.10+ is required.
 python -m pip install -e .
 ```
 
-Discover images without analyzing them:
+## 🖥️ CLI
+
+### Discover images
 
 ```bash
-vibesorter scan "path/to/your/photos"
+vibesorter scan "path/to/photos"
 ```
 
-Detect vibes for a whole folder:
+### Preview detected vibes
 
 ```bash
-vibesorter preview "path/to/your/photos"
+vibesorter preview "path/to/photos"
 ```
 
-Analyze one image and see its complete ranking:
-
-```bash
-vibesorter analyze "path/to/photo.jpg"
-```
-
-Get a compact vibe-count report:
-
-```bash
-vibesorter stats "path/to/your/photos"
-```
-
-Useful options for `preview` and `stats`:
+Useful options:
 
 ```bash
 vibesorter preview "path/to/photos" --workers 8
 vibesorter preview "path/to/photos" --vibe "Dark / Moody"
 vibesorter preview "path/to/photos" --min-score 0.70
 vibesorter preview "path/to/photos" --top 10
+vibesorter preview "path/to/photos" --json
+```
+
+### Analyze one image
+
+```bash
+vibesorter analyze "path/to/photo.jpg"
+```
+
+For machine-readable output:
+
+```bash
+vibesorter analyze "path/to/photo.jpg" --json
+```
+
+### Get vibe statistics
+
+```bash
+vibesorter stats "path/to/photos"
+```
+
+Or:
+
+```bash
 vibesorter stats "path/to/photos" --json
 ```
 
-`--json` is also available on `analyze`. JSON output makes the detector easier to integrate into scripts later.
+The CLI is intentionally read-only right now. **No images are moved, renamed, deleted, copied, or modified.**
 
-All commands are read-only: VibeSorter does not move, rename, delete, or edit your images.
+## ⚡ Performance
 
-## Development
+VibeSorter is designed for large personal image collections rather than one-image demos.
 
-The project is terminal-first and intentionally local. The analysis pipeline uses Pillow and concurrent workers so large image libraries can be processed without sending images anywhere.
+Analysis uses concurrent workers and lightweight local features, so thousands of images can be processed without uploading them anywhere. The goal is to keep the pipeline simple enough that performance comes from efficient local processing rather than an expensive AI service.
 
-## Roadmap
+## 🗺️ Roadmap
 
-1. Folder discovery and CLI foundation
-2. Local visual feature extraction
-3. Vibe classification
-4. Better text/screenshot awareness
-5. Preview proposed groups
-6. User-confirmed folder creation and sorting
-7. Desktop application
+### Phase 1 — Foundation
+
+- [x] Recursive image discovery
+- [x] Local visual feature extraction
+- [x] Vibe classification
+- [x] Concurrent analysis
+- [x] CLI reports and JSON output
+
+### Phase 2 — Better understanding
+
+- [ ] Improve vibe scoring and calibration
+- [ ] Detect text-heavy / screenshot-like images separately
+- [ ] Add duplicate / near-duplicate awareness
+- [ ] Improve handling of unusual image formats
+
+### Phase 3 — Actual organization
+
+- [ ] Generate proposed folder structures
+- [ ] Let users review proposed moves
+- [ ] User-confirmed sorting
+- [ ] Safe undo / rollback
+
+### Phase 4 — Visual interface
+
+- [ ] Image-grid preview
+- [ ] Interactive vibe browser
+- [ ] Desktop application
+- [ ] Search and filtering
+
+## 🔒 Privacy
+
+VibeSorter is **local-first**.
+
+Your images stay on your machine during analysis. The project does not require uploading your personal image library to a third-party AI service.
+
+## 🛠️ Tech
+
+- Python
+- Pillow
+- `argparse`
+- `ThreadPoolExecutor`
+- Local image analysis
+- CLI-first workflow
+
+## 📄 License
+
+See [LICENSE](LICENSE).
+
+---
+
+VibeSorter is an ongoing experiment in **organizing images by how they feel, not just what they contain.**
