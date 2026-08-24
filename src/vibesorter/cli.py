@@ -8,9 +8,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .duplicates import DEFAULT_MAX_DISTANCE, find_exact_duplicates, find_near_duplicates
+from .operations import apply_reviewed
 from .pipeline import analyze_image
-from .proposal import build_proposal, proposal_from_dict, proposal_to_dict, proposal_to_json
-from .review import parse_selection, review_proposal
+from .proposal import MoveOperation, build_proposal, proposal_from_dict, proposal_to_dict, proposal_to_json
+from .review import ReviewedOperation, parse_selection, review_proposal
 from .scanner import find_images
 from .vibes import VIBES, confidence_score
 
@@ -32,8 +33,12 @@ def _add_filter_arguments(command: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="vibesorter", description="Detect visual vibes in local images without changing the files.", epilog="Examples: vibesorter preview ./photos | vibesorter duplicates ./photos | vibesorter propose ./photos | vibesorter review proposal.json --accept 1,3-5")
-    parser.add_argument("--version", action="version", version="VibeSorter 0.5.0")
+    parser = argparse.ArgumentParser(
+        prog="vibesorter",
+        description="Detect visual vibes in local images and safely review or apply organization plans.",
+        epilog="Examples: vibesorter preview ./photos | vibesorter propose ./photos --output proposal.json | vibesorter review proposal.json --accept 1,3-5 --output reviewed.json | vibesorter apply reviewed.json --confirm",
+    )
+    parser.add_argument("--version", action="version", version="VibeSorter 0.6.0")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     scan = subparsers.add_parser("scan", help="Discover supported images (read-only)."); _add_folder_argument(scan)
@@ -43,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     duplicates = subparsers.add_parser("duplicates", help="Find exact and visually near-duplicate images (read-only)."); _add_folder_argument(duplicates); duplicates.add_argument("--max-distance", type=int, default=DEFAULT_MAX_DISTANCE); duplicates.add_argument("--json", action="store_true")
     propose = subparsers.add_parser("propose", help="Generate a deterministic, read-only folder organization proposal."); _add_folder_argument(propose); _add_workers_argument(propose); _add_filter_arguments(propose); propose.add_argument("--output-root", type=Path, default=Path("VibeSorted")); propose.add_argument("--output", type=Path); propose.add_argument("--json", action="store_true")
     review = subparsers.add_parser("review", help="Review a saved proposal without changing files."); review.add_argument("proposal", type=Path); review.add_argument("--accept", default="", help="Accept operation IDs/ranges, e.g. 1,3-5 or all."); review.add_argument("--reject", default="", help="Reject operation IDs/ranges, e.g. 2,7-9 or all."); review.add_argument("--accept-vibe", action="append", default=[], help="Accept every operation for this vibe; repeatable."); review.add_argument("--reject-vibe", action="append", default=[], help="Reject every operation for this vibe; repeatable."); review.add_argument("--output", type=Path, help="Write the reviewed JSON to this path."); review.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    apply = subparsers.add_parser("apply", help="Apply only accepted operations from a reviewed proposal."); apply.add_argument("reviewed", type=Path, help="Reviewed proposal JSON produced by the review command."); apply.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); apply.add_argument("--dry-run", action="store_true", help="Show what would move without changing files."); apply.add_argument("--json", action="store_true", help="Print machine-readable results.")
     return parser
 
 
@@ -106,9 +112,36 @@ def _run_review(args, parser):
     return 0
 
 
+def _load_reviewed(path: Path, parser) -> tuple[ReviewedOperation, ...]:
+    try: data = json.loads(path.expanduser().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc: parser.error(f"invalid reviewed proposal: {exc}")
+    try:
+        proposal = proposal_from_dict(data)
+        statuses = {int(item["id"]): item["status"] for item in data.get("review", [])}
+        if set(statuses) != {operation.id for operation in proposal.operations}: raise ValueError("reviewed proposal must contain one status for every operation")
+        if any(status not in {"accepted", "rejected", "pending"} for status in statuses.values()): raise ValueError("invalid review status")
+        return tuple(ReviewedOperation(operation, statuses[operation.id]) for operation in proposal.operations)
+    except (KeyError, TypeError, ValueError) as exc: parser.error(f"invalid reviewed proposal: {exc}")
+
+
+def _run_apply(args, parser):
+    if not args.confirm and not args.dry_run:
+        parser.error("refusing to change files without --confirm (use --dry-run to preview)")
+    reviewed = _load_reviewed(args.reviewed, parser)
+    results = apply_reviewed(reviewed, confirm=args.confirm, dry_run=args.dry_run)
+    if args.json:
+        print(json.dumps([{"id": r.operation_id, "status": r.status, "source": str(r.source), "destination": str(r.destination), "detail": r.detail} for r in results], indent=2, ensure_ascii=False))
+    else:
+        for result in results: print(f"[{result.operation_id:>4}] {result.status:<8} {result.source} -> {result.destination}" + (f" ({result.detail})" if result.detail else ""))
+        moved = sum(result.status == "moved" for result in results)
+        print(f"\n{moved} file(s) moved; conflicts and missing sources were never overwritten.")
+    return 0
+
+
 def main() -> int:
     parser = build_parser(); args = parser.parse_args()
     if args.command == "review": return _run_review(args, parser)
+    if args.command == "apply": return _run_apply(args, parser)
     if args.command == "analyze":
         result, error = _analyze_one(args.image.expanduser())
         if error is not None: parser.error(str(error))
