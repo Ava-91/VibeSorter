@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 import math
 
-from PIL import Image, ImageStat
+from PIL import Image
 
 
 # 64x64 keeps enough detail for vibe classification while cutting per-image
@@ -36,82 +35,90 @@ class ImageFeatures:
     colors: tuple[ColorSample, ...]
 
 
-def _iter_pixels(image: Image.Image) -> Iterable[tuple[int, int, int]]:
-    return image.getdata()
-
-
-def _representative_colors(image: Image.Image, limit: int = PALETTE_SIZE) -> tuple[ColorSample, ...]:
-    # Quantize to 4 bits/channel. This gives a stable, cheap 4096-bin palette.
-    counts: dict[tuple[int, int, int], int] = {}
-    total = 0
-    for r, g, b in _iter_pixels(image):
-        key = ((r // 16) * 16 + 8, (g // 16) * 16 + 8, (b // 16) * 16 + 8)
-        counts[key] = counts.get(key, 0) + 1
-        total += 1
-
-    top = sorted(counts.items(), key=lambda item: item[1], reverse=True)[:limit]
-    return tuple(
-        ColorSample(rgb=color, proportion=count / total)
-        for color, count in top
-    )
-
-
 def extract_features(path: str | Path) -> ImageFeatures:
     """Extract lightweight visual signals from an image without any cloud API."""
     image_path = Path(path).expanduser()
     with Image.open(image_path) as source:
         image = source.convert("RGB")
         image.thumbnail(ANALYSIS_SIZE, Image.Resampling.LANCZOS)
-        pixels = list(_iter_pixels(image))
-        # Let Pillow's native implementation handle RGB -> HSV instead of
-        # calling colorsys.rgb_to_hsv once per pixel in Python.
-        hsv_values = list(image.convert("HSV").getdata())
+        hsv_image = image.convert("HSV")
+        rgb_pixels = image.getdata()
+        hsv_pixels = hsv_image.getdata()
 
-    if not pixels:
+        counts: dict[tuple[int, int, int], int] = {}
+        sum_r = sum_g = sum_b = 0
+        sum_h = sum_s = sum_v = 0
+        sum_luminance = sum_luminance_sq = 0.0
+        warm = cool = grayscale = dark = light = 0
+        count = 0
+
+        # Keep all feature extraction in one native-backed pixel pass. The old
+        # implementation repeatedly walked the same pixels for averages, HSV,
+        # luminance/contrast, vibe ratios, and the representative palette.
+        for (r, g, b), (hue_byte, sat_byte, value_byte) in zip(rgb_pixels, hsv_pixels):
+            count += 1
+            sum_r += r
+            sum_g += g
+            sum_b += b
+            sum_h += hue_byte
+            sum_s += sat_byte
+            sum_v += value_byte
+
+            luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            sum_luminance += luminance
+            sum_luminance_sq += luminance * luminance
+
+            key = ((r // 16) * 16 + 8, (g // 16) * 16 + 8, (b // 16) * 16 + 8)
+            counts[key] = counts.get(key, 0) + 1
+
+            sat = sat_byte / 255.0
+            value = value_byte / 255.0
+            hue = hue_byte / 255.0
+            if sat < 0.18:
+                grayscale += 1
+            if value < 0.25:
+                dark += 1
+            if value > 0.78:
+                light += 1
+            # Red/orange/yellow are warm; cyan/blue are cool. Green stays neutral.
+            if sat >= 0.18:
+                if hue < 0.16 or hue >= 0.92:
+                    warm += 1
+                elif 0.48 <= hue <= 0.72:
+                    cool += 1
+
+    if not count:
         raise ValueError(f"Image contains no pixels: {image_path}")
 
-    count = len(pixels)
-    avg = tuple(round(sum(pixel[channel] for pixel in pixels) / count) for channel in range(3))
-    avg_hsv = tuple(
-        sum(value[channel] / 255.0 for value in hsv_values) / count
-        for channel in range(3)
+    mean_luminance = sum_luminance / count
+    variance = max(0.0, (sum_luminance_sq / count) - (mean_luminance * mean_luminance))
+    contrast = math.sqrt(variance) / 255.0
+
+    top = sorted(counts.items(), key=lambda item: item[1], reverse=True)[:PALETTE_SIZE]
+    colors = tuple(
+        ColorSample(rgb=color, proportion=amount / count)
+        for color, amount in top
     )
-
-    brightness = avg_hsv[2]
-    saturation = avg_hsv[1]
-    luminances = [0.2126 * r + 0.7152 * g + 0.0722 * b for r, g, b in pixels]
-    mean_luminance = sum(luminances) / count
-    contrast = math.sqrt(sum((value - mean_luminance) ** 2 for value in luminances)) / 255.0
-
-    warm = cool = grayscale = dark = light = 0
-    for hue_byte, sat_byte, value_byte in hsv_values:
-        hue = hue_byte / 255.0
-        sat = sat_byte / 255.0
-        value = value_byte / 255.0
-        if sat < 0.18:
-            grayscale += 1
-        if value < 0.25:
-            dark += 1
-        if value > 0.78:
-            light += 1
-        # Red/orange/yellow are warm; cyan/blue are cool. Green stays neutral.
-        if sat >= 0.18:
-            if hue < 0.16 or hue >= 0.92:
-                warm += 1
-            elif 0.48 <= hue <= 0.72:
-                cool += 1
 
     return ImageFeatures(
         path=image_path,
-        average_rgb=avg,
-        average_hsv=avg_hsv,
-        brightness=brightness,
-        saturation=saturation,
+        average_rgb=(
+            round(sum_r / count),
+            round(sum_g / count),
+            round(sum_b / count),
+        ),
+        average_hsv=(
+            sum_h / count / 255.0,
+            sum_s / count / 255.0,
+            sum_v / count / 255.0,
+        ),
+        brightness=sum_v / count / 255.0,
+        saturation=sum_s / count / 255.0,
         contrast=min(1.0, contrast),
         warm_ratio=warm / count,
         cool_ratio=cool / count,
         grayscale_ratio=grayscale / count,
         dark_ratio=dark / count,
         light_ratio=light / count,
-        colors=_representative_colors(image),
+        colors=colors,
     )
