@@ -16,6 +16,13 @@ VIBES = (
 )
 
 
+# A winner needs both a useful absolute score and a meaningful lead over the
+# runner-up. This prevents visually ambiguous images from being treated as
+# equally reliable as obvious cases.
+MIN_CONFIDENT_SCORE = 0.60
+MIN_CONFIDENT_MARGIN = 0.08
+
+
 @dataclass(frozen=True, slots=True)
 class VibeScore:
     name: str
@@ -85,6 +92,22 @@ def score_vibes(features: ImageFeatures) -> tuple[VibeScore, ...]:
         key=lambda result: result.score,
         reverse=True,
     ))
+
+
+def is_confident(scores: tuple[VibeScore, ...], *,
+                 min_score: float = MIN_CONFIDENT_SCORE,
+                 min_margin: float = MIN_CONFIDENT_MARGIN) -> bool:
+    """Return whether the winner is strong enough to treat as an automatic classification.
+
+    The score is a heuristic, not a statistical probability. Confidence requires
+    both a reasonable winner score and separation from the runner-up.
+    """
+    if not scores:
+        return False
+    winner = scores[0]
+    runner_up = scores[1] if len(scores) > 1 else None
+    margin = winner.score if runner_up is None else winner.score - runner_up.score
+    return winner.score >= min_score and margin >= min_margin
 
 
 def classify(features: ImageFeatures) -> VibeScore:
