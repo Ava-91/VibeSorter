@@ -7,6 +7,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from .duplicates import DEFAULT_MAX_DISTANCE, find_exact_duplicates, find_near_duplicates
 from .pipeline import analyze_image
 from .scanner import find_images
 from .vibes import VIBES, confidence_score
@@ -35,7 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="vibesorter",
         description="Detect visual vibes in local images without changing the files.",
-        epilog="Examples: vibesorter scan ./photos | vibesorter preview ./photos | vibesorter analyze ./photo.jpg | vibesorter stats ./photos",
+        epilog="Examples: vibesorter scan ./photos | vibesorter preview ./photos | vibesorter analyze ./photo.jpg | vibesorter stats ./photos | vibesorter duplicates ./photos",
     )
     parser.add_argument("--version", action="version", version="VibeSorter 0.3.0")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -59,6 +60,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_workers_argument(stats)
     _add_filter_arguments(stats)
     stats.add_argument("--json", action="store_true", help="Print machine-readable JSON instead of the text report.")
+
+    duplicates = subparsers.add_parser("duplicates", help="Find exact and visually near-duplicate images (read-only).")
+    _add_folder_argument(duplicates)
+    duplicates.add_argument("--max-distance", type=int, default=DEFAULT_MAX_DISTANCE,
+                            help=f"Maximum perceptual-hash distance for near duplicates (default: {DEFAULT_MAX_DISTANCE}).")
+    duplicates.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     return parser
 
@@ -91,6 +98,8 @@ def _validate_filters(args, parser: argparse.ArgumentParser) -> None:
         parser.error("--min-score must be between 0 and 1")
     if hasattr(args, "max_text_likelihood") and not 0 <= args.max_text_likelihood <= 1:
         parser.error("--max-text-likelihood must be between 0 and 1")
+    if hasattr(args, "max_distance") and args.max_distance < 1:
+        parser.error("--max-distance must be at least 1")
     if getattr(args, "top", 1) < 1:
         parser.error("--top must be at least 1")
 
@@ -168,6 +177,33 @@ def main() -> int:
         return 0
 
     _validate_filters(args, parser)
+
+    if args.command == "duplicates":
+        exact = find_exact_duplicates(images)
+        near = find_near_duplicates(images, max_distance=args.max_distance)
+        if args.json:
+            print(json.dumps({
+                "total": len(images),
+                "exact_duplicates": [
+                    {"hash": digest, "paths": [str(path) for path in paths]}
+                    for digest, paths in exact.items()
+                ],
+                "near_duplicates": [
+                    {"left": str(left), "right": str(right), "distance": distance}
+                    for left, right, distance in near
+                ],
+            }, indent=2))
+            return 0
+        print(f"Scanned {len(images)} image(s) for duplicates.\n")
+        print(f"=== Exact duplicate groups: {len(exact)} ===")
+        for paths in exact.values():
+            print("\n".join(f"  {path}" for path in paths))
+            print()
+        print(f"=== Near-duplicate pairs (distance <= {args.max_distance}): {len(near)} ===")
+        for left, right, distance in near:
+            print(f"  {distance:>2}  {left}  <->  {right}")
+        print("\nNo files were created, moved, copied, renamed, deleted, or modified.")
+        return 0
 
     if args.command == "stats":
         groups, skipped = _analyze_folder(images, args.workers, vibe=args.vibe,

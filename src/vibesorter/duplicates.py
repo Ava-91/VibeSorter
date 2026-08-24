@@ -59,30 +59,88 @@ def hamming_distance(left: int, right: int) -> int:
     return (left ^ right).bit_count()
 
 
+class _BKTree:
+    """Small metric index that avoids an O(n²) near-duplicate scan."""
+
+    def __init__(self) -> None:
+        self._root: tuple[int, list[Path], dict[int, "_BKTree"]] | None = None
+
+    def add(self, value: int, path: Path) -> None:
+        if self._root is None:
+            self._root = (value, [path], {})
+            return
+
+        node = self._root
+        while True:
+            node_value, paths, children = node
+            distance = hamming_distance(value, node_value)
+            if distance == 0:
+                paths.append(path)
+                return
+            child = children.get(distance)
+            if child is None:
+                child = _BKTree()
+                children[distance] = child
+                child._root = (value, [path], {})
+                return
+            node = child._root  # type: ignore[assignment]
+
+    def query(self, value: int, radius: int) -> list[tuple[int, list[Path]]]:
+        if self._root is None:
+            return []
+        matches: list[tuple[int, list[Path]]] = []
+        self._query(self._root, value, radius, matches)
+        return matches
+
+    def _query(
+        self,
+        node: tuple[int, list[Path], dict[int, "_BKTree"]],
+        value: int,
+        radius: int,
+        matches: list[tuple[int, list[Path]]],
+    ) -> None:
+        node_value, paths, children = node
+        distance = hamming_distance(value, node_value)
+        if distance <= radius:
+            matches.append((node_value, paths))
+        lower = max(0, distance - radius)
+        upper = distance + radius
+        for child_distance, child in children.items():
+            if lower <= child_distance <= upper and child._root is not None:
+                self._query(child._root, value, radius, matches)
+
+
 def find_near_duplicates(
     paths: list[Path],
     *,
     max_distance: int = DEFAULT_MAX_DISTANCE,
 ) -> list[tuple[Path, Path, int]]:
-    """Find visually similar image pairs using perceptual-hash distance.
+    """Find visually similar image pairs using indexed perceptual hashes.
 
-    A small Hamming distance means the resized grayscale structures are similar.
-    This deliberately reports pairs rather than deleting or choosing a winner.
+    Pairs at distance zero are omitted because exact duplicates are reported by
+    ``find_exact_duplicates``. The BK-tree keeps this from becoming a full
+    pairwise scan as collections grow.
     """
-    if max_distance < 0:
-        raise ValueError("max_distance must be non-negative")
+    if max_distance < 1:
+        raise ValueError("max_distance must be at least 1")
 
+    tree = _BKTree()
+    matches: list[tuple[Path, Path, int]] = []
     hashed: list[tuple[Path, int]] = []
+
     for path in paths:
         try:
             hashed.append((path, perceptual_hash(path)))
         except (OSError, ValueError):
             continue
 
-    matches: list[tuple[Path, Path, int]] = []
-    for index, (left_path, left_hash) in enumerate(hashed):
-        for right_path, right_hash in hashed[index + 1:]:
-            distance = hamming_distance(left_hash, right_hash)
-            if distance <= max_distance:
-                matches.append((left_path, right_path, distance))
-    return matches
+    for path, value in hashed:
+        for matched_value, matched_paths in tree.query(value, max_distance):
+            distance = hamming_distance(value, matched_value)
+            if distance == 0:
+                continue
+            for matched_path in matched_paths:
+                matches.append((matched_path, path, distance))
+        tree.add(value, path)
+
+    return sorted(matches, key=lambda item: (item[2], str(item[0]), str(item[1])))
