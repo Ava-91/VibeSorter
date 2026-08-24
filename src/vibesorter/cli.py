@@ -6,8 +6,10 @@ import os
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from uuid import uuid4
 
 from .duplicates import DEFAULT_MAX_DISTANCE, find_exact_duplicates, find_near_duplicates
+from .history import list_history, record_batch, rollback_batch
 from .operations import apply_reviewed
 from .pipeline import analyze_image
 from .proposal import MoveOperation, build_proposal, proposal_from_dict, proposal_to_dict, proposal_to_json
@@ -33,12 +35,8 @@ def _add_filter_arguments(command: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="vibesorter",
-        description="Detect visual vibes in local images and safely review or apply organization plans.",
-        epilog="Examples: vibesorter preview ./photos | vibesorter propose ./photos --output proposal.json | vibesorter review proposal.json --accept 1,3-5 --output reviewed.json | vibesorter apply reviewed.json --confirm",
-    )
-    parser.add_argument("--version", action="version", version="VibeSorter 0.6.0")
+    parser = argparse.ArgumentParser(prog="vibesorter", description="Detect visual vibes in local images and safely review, apply, or undo organization plans.", epilog="Examples: vibesorter preview ./photos | vibesorter propose ./photos --output proposal.json | vibesorter review proposal.json --accept 1,3-5 --output reviewed.json | vibesorter apply reviewed.json --confirm | vibesorter rollback BATCH_ID --confirm")
+    parser.add_argument("--version", action="version", version="VibeSorter 0.7.0")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     scan = subparsers.add_parser("scan", help="Discover supported images (read-only)."); _add_folder_argument(scan)
@@ -48,7 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
     duplicates = subparsers.add_parser("duplicates", help="Find exact and visually near-duplicate images (read-only)."); _add_folder_argument(duplicates); duplicates.add_argument("--max-distance", type=int, default=DEFAULT_MAX_DISTANCE); duplicates.add_argument("--json", action="store_true")
     propose = subparsers.add_parser("propose", help="Generate a deterministic, read-only folder organization proposal."); _add_folder_argument(propose); _add_workers_argument(propose); _add_filter_arguments(propose); propose.add_argument("--output-root", type=Path, default=Path("VibeSorted")); propose.add_argument("--output", type=Path); propose.add_argument("--json", action="store_true")
     review = subparsers.add_parser("review", help="Review a saved proposal without changing files."); review.add_argument("proposal", type=Path); review.add_argument("--accept", default="", help="Accept operation IDs/ranges, e.g. 1,3-5 or all."); review.add_argument("--reject", default="", help="Reject operation IDs/ranges, e.g. 2,7-9 or all."); review.add_argument("--accept-vibe", action="append", default=[], help="Accept every operation for this vibe; repeatable."); review.add_argument("--reject-vibe", action="append", default=[], help="Reject every operation for this vibe; repeatable."); review.add_argument("--output", type=Path, help="Write the reviewed JSON to this path."); review.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-    apply = subparsers.add_parser("apply", help="Apply only accepted operations from a reviewed proposal."); apply.add_argument("reviewed", type=Path, help="Reviewed proposal JSON produced by the review command."); apply.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); apply.add_argument("--dry-run", action="store_true", help="Show what would move without changing files."); apply.add_argument("--json", action="store_true", help="Print machine-readable results.")
+    apply = subparsers.add_parser("apply", help="Apply only accepted operations from a reviewed proposal."); apply.add_argument("reviewed", type=Path, help="Reviewed proposal JSON produced by the review command."); apply.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); apply.add_argument("--dry-run", action="store_true", help="Show what would move without changing files."); apply.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Where to record successful moves."); apply.add_argument("--json", action="store_true", help="Print machine-readable results.")
+    rollback = subparsers.add_parser("rollback", help="Safely undo a completed sorting batch."); rollback.add_argument("batch_id", help="Batch ID printed by apply."); rollback.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); rollback.add_argument("--dry-run", action="store_true", help="Check what would be restored without changing files."); rollback.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Move history JSONL file."); rollback.add_argument("--json", action="store_true")
+    history = subparsers.add_parser("history", help="Inspect recorded sorting operations."); history.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl")); history.add_argument("--json", action="store_true")
     return parser
 
 
@@ -125,16 +125,39 @@ def _load_reviewed(path: Path, parser) -> tuple[ReviewedOperation, ...]:
 
 
 def _run_apply(args, parser):
-    if not args.confirm and not args.dry_run:
-        parser.error("refusing to change files without --confirm (use --dry-run to preview)")
+    if not args.confirm and not args.dry_run: parser.error("refusing to change files without --confirm (use --dry-run to preview)")
     reviewed = _load_reviewed(args.reviewed, parser)
     results = apply_reviewed(reviewed, confirm=args.confirm, dry_run=args.dry_run)
+    if args.confirm and not args.dry_run:
+        batch_id = uuid4().hex[:12]
+        recorded = record_batch(batch_id, results, args.history)
+    else: recorded = 0; batch_id = None
     if args.json:
-        print(json.dumps([{"id": r.operation_id, "status": r.status, "source": str(r.source), "destination": str(r.destination), "detail": r.detail} for r in results], indent=2, ensure_ascii=False))
+        payload = {"batch_id": batch_id, "recorded": recorded, "results": [{"id": r.operation_id, "status": r.status, "source": str(r.source), "destination": str(r.destination), "detail": r.detail} for r in results]}; print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
         for result in results: print(f"[{result.operation_id:>4}] {result.status:<8} {result.source} -> {result.destination}" + (f" ({result.detail})" if result.detail else ""))
         moved = sum(result.status == "moved" for result in results)
         print(f"\n{moved} file(s) moved; conflicts and missing sources were never overwritten.")
+        if batch_id: print(f"Batch: {batch_id}\nHistory: {args.history.expanduser()}")
+    return 0
+
+
+def _run_rollback(args, parser):
+    if not args.confirm and not args.dry_run: parser.error("refusing to change files without --confirm (use --dry-run to preview)")
+    try: results = rollback_batch(args.history, args.batch_id, confirm=args.confirm, dry_run=args.dry_run)
+    except (OSError, ValueError, json.JSONDecodeError) as exc: parser.error(str(exc))
+    if args.json: print(json.dumps(results, indent=2, ensure_ascii=False))
+    else:
+        for result in results: print(f"[{result['operation_id']:>4}] {result['status']:<9} {result['destination']} -> {result['source']} ({result['detail']})")
+        print(f"\nRollback check complete for batch {args.batch_id}.")
+    return 0
+
+
+def _run_history(args):
+    records = list_history(args.history)
+    if args.json: print(json.dumps(records, indent=2, ensure_ascii=False)); return 0
+    if not records: print(f"No history recorded in {args.history.expanduser()}"); return 0
+    for item in records: print(f"{item.get('timestamp','')}  {item.get('batch_id','')}  op {item.get('operation_id','?')}  {item.get('source','')} -> {item.get('destination','')}")
     return 0
 
 
@@ -142,6 +165,8 @@ def main() -> int:
     parser = build_parser(); args = parser.parse_args()
     if args.command == "review": return _run_review(args, parser)
     if args.command == "apply": return _run_apply(args, parser)
+    if args.command == "rollback": return _run_rollback(args, parser)
+    if args.command == "history": return _run_history(args)
     if args.command == "analyze":
         result, error = _analyze_one(args.image.expanduser())
         if error is not None: parser.error(str(error))
