@@ -5,7 +5,7 @@ from pathlib import Path
 from PIL import Image
 
 from vibesorter.features import extract_features
-from vibesorter.vibes import VibeScore, classify, is_confident, score_vibes
+from vibesorter.vibes import VibeScore, classify, confidence_score, is_confident, score_vibes
 
 
 def make_image(path: Path, color: tuple[int, int, int]) -> None:
@@ -50,6 +50,14 @@ def test_vibe_scores_are_sorted_and_complete(tmp_path: Path) -> None:
     }
     assert classify(features) == scores[0]
     assert scores[0].name == "Red / Warm"
+
+
+def test_confidence_rewards_clear_separation() -> None:
+    clear = (VibeScore("Red / Warm", 0.82), VibeScore("Bright / Colorful", 0.55))
+    close = (VibeScore("Red / Warm", 0.82), VibeScore("Bright / Colorful", 0.78))
+
+    assert confidence_score(clear) > confidence_score(close)
+    assert 0 <= confidence_score(clear) <= 1
 
 
 def test_ambiguous_winner_requires_review() -> None:
