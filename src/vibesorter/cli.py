@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -45,14 +46,17 @@ def build_parser() -> argparse.ArgumentParser:
     _add_workers_argument(preview)
     _add_filter_arguments(preview)
     preview.add_argument("--top", type=int, default=5, help="Number of example paths shown per vibe (default: 5).")
+    preview.add_argument("--json", action="store_true", help="Print machine-readable JSON instead of the text report.")
 
     analyze = subparsers.add_parser("analyze", help="Detect the vibe of one image and show its ranking.")
     analyze.add_argument("image", type=Path, help="Image file to analyze.")
+    analyze.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     stats = subparsers.add_parser("stats", help="Summarize vibe counts for a folder.")
     _add_folder_argument(stats)
     _add_workers_argument(stats)
     _add_filter_arguments(stats)
+    stats.add_argument("--json", action="store_true", help="Print machine-readable JSON instead of the text report.")
 
     return parser
 
@@ -79,9 +83,9 @@ def _load_images(args, parser: argparse.ArgumentParser) -> list[Path]:
 
 
 def _validate_filters(args, parser: argparse.ArgumentParser) -> None:
-    if args.workers < 1:
+    if hasattr(args, "workers") and args.workers < 1:
         parser.error("--workers must be at least 1")
-    if not 0 <= args.min_score <= 1:
+    if hasattr(args, "min_score") and not 0 <= args.min_score <= 1:
         parser.error("--min-score must be between 0 and 1")
     if getattr(args, "top", 1) < 1:
         parser.error("--top must be at least 1")
@@ -107,6 +111,18 @@ def _analyze_folder(images: list[Path], workers: int, *, vibe: str | None = None
     return groups, skipped
 
 
+def _json_groups(groups: dict[str, list[tuple[Path, float]]], top: int | None = None):
+    result = {}
+    for vibe_name, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+        selected = items if top is None else items[:top]
+        result[vibe_name] = {
+            "count": len(items),
+            "examples": [{"path": str(path), "score": round(score, 4)} for path, score in selected],
+            "average_score": round(sum(score for _, score in items) / len(items), 4),
+        }
+    return result
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -115,6 +131,13 @@ def main() -> int:
         result, error = _analyze_one(args.image.expanduser())
         if error is not None:
             parser.error(str(error))
+        if args.json:
+            print(json.dumps({
+                "path": str(result.path),
+                "best": {"name": result.best.name, "score": result.best.score},
+                "ranking": [{"name": score.name, "score": score.score} for score in result.scores],
+            }, indent=2))
+            return 0
         print(f"Image: {result.path}")
         print(f"Best vibe: {result.best.name} ({result.best.score:.0%})\n")
         print("Vibe ranking:")
@@ -132,10 +155,14 @@ def main() -> int:
     _validate_filters(args, parser)
 
     if args.command == "stats":
-        print(f"Analyzing {len(images)} image(s) for vibe statistics...\n")
         groups, skipped = _analyze_folder(images, args.workers, vibe=args.vibe,
                                           min_score=args.min_score, show_progress=False)
         analyzed = len(images) - skipped
+        if args.json:
+            print(json.dumps({"total": len(images), "analyzed": analyzed, "skipped": skipped,
+                              "vibes": _json_groups(groups)}, indent=2))
+            return 0
+        print(f"Analyzing {len(images)} image(s) for vibe statistics...\n")
         print("=== Vibe statistics ===")
         for vibe_name, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
             average = sum(score for _, score in items) / len(items)
@@ -143,9 +170,14 @@ def main() -> int:
         print(f"\nTotal: {analyzed} analyzed, {skipped} skipped.")
         return 0
 
-    print(f"Analyzing {len(images)} image(s) locally in {args.folder.expanduser()}\n")
-    groups, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score)
+    groups, skipped = _analyze_folder(images, args.workers, vibe=args.vibe,
+                                      min_score=args.min_score, show_progress=not args.json)
+    if args.json:
+        print(json.dumps({"total": len(images), "analyzed": len(images) - skipped, "skipped": skipped,
+                          "vibes": _json_groups(groups, args.top)}, indent=2))
+        return 0
 
+    print(f"Analyzing {len(images)} image(s) locally in {args.folder.expanduser()}\n")
     print("\n=== Proposed vibe folders ===")
     for vibe_name, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
         print(f"\n{vibe_name} — {len(items)} image(s)")
