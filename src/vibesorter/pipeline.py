@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .features import extract_features
-from .scanner import discover_images
+from .scanner import find_images
 from .vibes import VibeScore, score_vibes
 
 
@@ -29,7 +29,7 @@ def analyze_folder(
     on_progress: Callable[[int, int, Path], None] | None = None,
 ) -> Iterator[AnalysisResult]:
     """Analyze images lazily so large folders stay memory-friendly."""
-    images = discover_images(folder, recursive=recursive)
+    images = find_images(folder, recursive=recursive)
     total = len(images)
     for index, path in enumerate(images, start=1):
         result = analyze_image(path)
