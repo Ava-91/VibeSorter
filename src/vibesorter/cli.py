@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
-from collections import Counter, defaultdict
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .pipeline import analyze_image
 from .scanner import find_images
+from .vibes import VIBES
 
 
 def _add_folder_argument(command: argparse.ArgumentParser) -> None:
@@ -20,6 +20,12 @@ def _add_workers_argument(command: argparse.ArgumentParser) -> None:
     default_workers = min(8, max(1, os.cpu_count() or 1))
     command.add_argument("--workers", type=int, default=default_workers,
                          help=f"Number of images to analyze concurrently (default: {default_workers}).")
+
+
+def _add_filter_arguments(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--vibe", choices=VIBES, help="Only include images whose best vibe matches this category.")
+    command.add_argument("--min-score", type=float, default=0.0,
+                         help="Ignore classifications below this confidence from 0 to 1 (default: 0).")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,6 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
     preview = subparsers.add_parser("preview", help="Detect vibes for a folder without changing files.")
     _add_folder_argument(preview)
     _add_workers_argument(preview)
+    _add_filter_arguments(preview)
+    preview.add_argument("--top", type=int, default=5, help="Number of example paths shown per vibe (default: 5).")
 
     analyze = subparsers.add_parser("analyze", help="Detect the vibe of one image and show its ranking.")
     analyze.add_argument("image", type=Path, help="Image file to analyze.")
@@ -44,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     stats = subparsers.add_parser("stats", help="Summarize vibe counts for a folder.")
     _add_folder_argument(stats)
     _add_workers_argument(stats)
+    _add_filter_arguments(stats)
 
     return parser
 
@@ -69,7 +78,17 @@ def _load_images(args, parser: argparse.ArgumentParser) -> list[Path]:
         parser.error(str(exc))
 
 
-def _analyze_folder(images: list[Path], workers: int, *, show_progress: bool = True):
+def _validate_filters(args, parser: argparse.ArgumentParser) -> None:
+    if args.workers < 1:
+        parser.error("--workers must be at least 1")
+    if not 0 <= args.min_score <= 1:
+        parser.error("--min-score must be between 0 and 1")
+    if getattr(args, "top", 1) < 1:
+        parser.error("--top must be at least 1")
+
+
+def _analyze_folder(images: list[Path], workers: int, *, vibe: str | None = None,
+                    min_score: float = 0.0, show_progress: bool = True):
     groups: dict[str, list[tuple[Path, float]]] = defaultdict(list)
     skipped = 0
     for index, (result, error) in enumerate(_analyze_many(images, workers), start=1):
@@ -79,9 +98,12 @@ def _analyze_folder(images: list[Path], workers: int, *, show_progress: bool = T
             if show_progress:
                 print(f"[{index}/{len(images)}] SKIP  {path}: {error}")
             continue
-        groups[result.best.name].append((path, result.best.score))
+        best = result.best
+        if best.score < min_score or (vibe is not None and best.name != vibe):
+            continue
+        groups[best.name].append((path, best.score))
         if show_progress:
-            print(f"[{index}/{len(images)}] {result.best.name:<18} {result.best.score:>5.0%}  {path}")
+            print(f"[{index}/{len(images)}] {best.name:<18} {best.score:>5.0%}  {path}")
     return groups, skipped
 
 
@@ -107,30 +129,30 @@ def main() -> int:
             print(image)
         return 0
 
-    if args.workers < 1:
-        parser.error("--workers must be at least 1")
+    _validate_filters(args, parser)
 
     if args.command == "stats":
         print(f"Analyzing {len(images)} image(s) for vibe statistics...\n")
-        groups, skipped = _analyze_folder(images, args.workers, show_progress=False)
+        groups, skipped = _analyze_folder(images, args.workers, vibe=args.vibe,
+                                          min_score=args.min_score, show_progress=False)
         analyzed = len(images) - skipped
         print("=== Vibe statistics ===")
-        for vibe, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+        for vibe_name, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
             average = sum(score for _, score in items) / len(items)
-            print(f"{vibe:<18} {len(items):>5} image(s)  avg confidence {average:.0%}")
+            print(f"{vibe_name:<18} {len(items):>5} image(s)  avg confidence {average:.0%}")
         print(f"\nTotal: {analyzed} analyzed, {skipped} skipped.")
         return 0
 
     print(f"Analyzing {len(images)} image(s) locally in {args.folder.expanduser()}\n")
-    groups, skipped = _analyze_folder(images, args.workers)
+    groups, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score)
 
     print("\n=== Proposed vibe folders ===")
-    for vibe, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
-        print(f"\n{vibe} — {len(items)} image(s)")
-        for path, score in items[:5]:
+    for vibe_name, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+        print(f"\n{vibe_name} — {len(items)} image(s)")
+        for path, score in items[:args.top]:
             print(f"  {score:>5.0%}  {path}")
-        if len(items) > 5:
-            print(f"  ... and {len(items) - 5} more")
+        if len(items) > args.top:
+            print(f"  ... and {len(items) - args.top} more")
 
     print(f"\nAnalysis complete — {len(images) - skipped} analyzed, {skipped} skipped.")
     print("No files were created, moved, copied, or modified.")
