@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .pipeline import analyze_image
@@ -16,8 +18,23 @@ def build_parser() -> argparse.ArgumentParser:
         command = subparsers.add_parser(name, help=help_text)
         command.add_argument("folder", type=Path, help="Folder to scan or analyze.")
         command.add_argument("--no-recursive", action="store_true", help="Only use the selected folder.")
+        if name == "preview":
+            default_workers = min(8, max(1, os.cpu_count() or 1))
+            command.add_argument(
+                "--workers",
+                type=int,
+                default=default_workers,
+                help=f"Number of images to analyze concurrently (default: {default_workers}).",
+            )
 
     return parser
+
+
+def _analyze_one(path: Path):
+    try:
+        return analyze_image(path), None
+    except Exception as exc:
+        return None, exc
 
 
 def main() -> int:
@@ -35,19 +52,27 @@ def main() -> int:
             print(image)
         return 0
 
+    if args.workers < 1:
+        parser.error("--workers must be at least 1")
+
     groups: dict[str, list[tuple[Path, float]]] = defaultdict(list)
     skipped = 0
-    print(f"Previewing {len(images)} image(s) locally in {args.folder.expanduser()}\n")
+    print(
+        f"Previewing {len(images)} image(s) locally in {args.folder.expanduser()} "
+        f"using {args.workers} worker(s)\n"
+    )
 
-    for index, path in enumerate(images, start=1):
-        try:
-            result = analyze_image(path)
-        except Exception as exc:
-            skipped += 1
-            print(f"[{index}/{len(images)}] SKIP  {path}: {exc}")
-            continue
-        groups[result.best.name].append((path, result.best.score))
-        print(f"[{index}/{len(images)}] {result.best.name:<18} {result.best.score:>5.0%}  {path}")
+    # Image decoding and Pillow's native operations can run concurrently, so
+    # large libraries spend less time waiting for one image at a time.
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        for index, (result, error) in enumerate(executor.map(_analyze_one, images), start=1):
+            path = images[index - 1]
+            if error is not None:
+                skipped += 1
+                print(f"[{index}/{len(images)}] SKIP  {path}: {error}")
+                continue
+            groups[result.best.name].append((path, result.best.score))
+            print(f"[{index}/{len(images)}] {result.best.name:<18} {result.best.score:>5.0%}  {path}")
 
     print("\n=== Proposed vibe folders ===")
     for vibe, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
