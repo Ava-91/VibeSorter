@@ -32,7 +32,55 @@ class ImageFeatures:
     grayscale_ratio: float
     dark_ratio: float
     light_ratio: float
+    text_likelihood: float
     colors: tuple[ColorSample, ...]
+
+
+def _text_likelihood(image: Image.Image, grayscale_ratio: float, contrast: float) -> float:
+    """Estimate text/screenshot-like structure without OCR.
+
+    This is deliberately a weak visual signal: dense edges and low colorfulness
+    are common in screenshots, documents, and text cards, but also occur in
+    ordinary photographs. The result should be used as a hint, not as a semantic
+    classification.
+    """
+    gray = image.convert("L")
+    width, height = gray.size
+    pixels = list(gray.getdata())
+    if width < 2 or height < 2:
+        return 0.0
+
+    edge_count = 0
+    strong_edges = 0
+    total_edges = 0
+    threshold = 28
+
+    for y in range(height - 1):
+        row = y * width
+        next_row = (y + 1) * width
+        for x in range(width - 1):
+            current = pixels[row + x]
+            horizontal = abs(current - pixels[row + x + 1])
+            vertical = abs(current - pixels[next_row + x])
+            edge = max(horizontal, vertical)
+            total_edges += 1
+            if edge > threshold:
+                edge_count += 1
+            if edge > 64:
+                strong_edges += 1
+
+    edge_density = edge_count / total_edges
+    strong_edge_density = strong_edges / total_edges
+
+    # Text-heavy images often combine many compact edges with restrained color.
+    # Keep the signal conservative so colorful/detailed photos are not rejected
+    # from vibe classification merely because they contain texture.
+    return max(0.0, min(1.0,
+        0.45 * min(1.0, edge_density / 0.42)
+        + 0.20 * min(1.0, strong_edge_density / 0.18)
+        + 0.25 * grayscale_ratio
+        + 0.10 * min(1.0, contrast / 0.45)
+    ))
 
 
 def extract_features(path: str | Path) -> ImageFeatures:
@@ -93,6 +141,7 @@ def extract_features(path: str | Path) -> ImageFeatures:
     mean_luminance = sum_luminance / count
     variance = max(0.0, (sum_luminance_sq / count) - (mean_luminance * mean_luminance))
     contrast = math.sqrt(variance) / 255.0
+    grayscale_ratio = grayscale / count
 
     top = sorted(counts.items(), key=lambda item: item[1], reverse=True)[:PALETTE_SIZE]
     colors = tuple(
@@ -117,8 +166,9 @@ def extract_features(path: str | Path) -> ImageFeatures:
         contrast=min(1.0, contrast),
         warm_ratio=warm / count,
         cool_ratio=cool / count,
-        grayscale_ratio=grayscale / count,
+        grayscale_ratio=grayscale_ratio,
         dark_ratio=dark / count,
         light_ratio=light / count,
+        text_likelihood=_text_likelihood(image, grayscale_ratio, min(1.0, contrast)),
         colors=colors,
     )
