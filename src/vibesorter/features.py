@@ -9,7 +9,9 @@ import math
 from PIL import Image, ImageStat
 
 
-ANALYSIS_SIZE = (96, 96)
+# 64x64 keeps enough detail for vibe classification while cutting per-image
+# pixel work by more than half compared with the previous 96x96 analysis size.
+ANALYSIS_SIZE = (64, 64)
 PALETTE_SIZE = 6
 
 
