@@ -2,15 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-IMAGE_EXTENSIONS = frozenset({
-    ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff"
-})
+from PIL import Image
+
+# Pillow's registered extensions reflect the formats actually available in the
+# installed Pillow build. This is safer than maintaining a hand-written list.
+IMAGE_EXTENSIONS = frozenset(Image.registered_extensions())
 
 
 def find_images(folder: str | Path, *, recursive: bool = True) -> list[Path]:
-    """Return supported image files below *folder*, sorted by path.
+    """Return Pillow-supported image files below *folder*, sorted by path.
 
-    The scanner only discovers files; it never moves, renames, deletes, or edits them.
+    Discovery is deliberately extension-based; the image is opened later so a
+    corrupt file can be reported without making scanning itself expensive.
     """
     root = Path(folder).expanduser()
     if not root.exists():
@@ -20,10 +23,6 @@ def find_images(folder: str | Path, *, recursive: bool = True) -> list[Path]:
 
     iterator = root.rglob("*") if recursive else root.glob("*")
     return sorted(
-        (
-            path
-            for path in iterator
-            if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
-        ),
+        (path for path in iterator if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS),
         key=lambda path: str(path).casefold(),
     )
