@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from .features import extract_features
+from .features import ImageFeatures, extract_features
 from .scanner import find_images
 from .vibes import VibeScore, score_vibes
 
@@ -12,14 +12,16 @@ from .vibes import VibeScore, score_vibes
 @dataclass(frozen=True, slots=True)
 class AnalysisResult:
     path: Path
+    features: ImageFeatures
     best: VibeScore
     scores: tuple[VibeScore, ...]
 
 
 def analyze_image(path: Path) -> AnalysisResult:
-    """Analyze one image locally and return its complete vibe ranking."""
-    scores = score_vibes(extract_features(path))
-    return AnalysisResult(path=path, best=scores[0], scores=scores)
+    """Analyze one image locally and retain its visual feature signals."""
+    features = extract_features(path)
+    scores = score_vibes(features)
+    return AnalysisResult(path=path, features=features, best=scores[0], scores=scores)
 
 
 def analyze_folder(
