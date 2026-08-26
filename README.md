@@ -8,17 +8,15 @@ It is built for people with *way too many pictures* who want to understand the v
 
 ## ✨ What is the idea?
 
-VibeSorter is not trying to be another generic photo manager.
-
-The core idea is **visual-aesthetic organization**: instead of asking *"What is in this image?"*, it asks *"What does this image look and feel like?"*
+VibeSorter is not trying to be another generic photo manager. The core idea is **visual-aesthetic organization**: instead of asking *"What is in this image?"*, it asks *"What does this image look and feel like?"*
 
 These are **visual vibes, not semantic labels**. VibeSorter currently does not try to read text, understand screenshots, recognize people, or determine what an image is about.
 
 ## 🧠 How it works
 
-The detector uses lightweight local image features including brightness, saturation, contrast, warm/cool balance, grayscale content, dark/light ratios, and dominant colors. Analysis runs through the packaged `src/vibesorter/` implementation.
+The detector uses lightweight local image features including brightness, saturation, contrast, warm/cool balance, grayscale content, dark/light ratios, and dominant colors. Analysis runs through the single packaged `src/vibesorter/` implementation.
 
-The repository deliberately uses a single `src` package tree so the code used during development and installation stays consistent.
+For repeated library analysis, the Python API can persist results in a local `.vibesorter/analysis.json` index. The cache is versioned, written atomically, and ignored when it is malformed or incompatible.
 
 ## 📦 Installation
 
@@ -37,46 +35,58 @@ vibesorter analyze "path/to/photo.jpg"
 vibesorter stats "path/to/photos"
 ```
 
-The CLI is read-only during analysis. **No images are moved, renamed, deleted, copied, or modified by scan/preview/analyze/stats.**
+The analysis commands are read-only with respect to source images.
+
+## 🐍 Python API
+
+For applications or scripts that need persistent local analysis:
+
+```python
+from vibesorter import analyze_library
+
+for result in analyze_library("path/to/photos"):
+    print(result.path, result.best.name, result.best.score, result.cached)
+```
+
+The first run extracts features. Later runs can reuse cached results for the same image paths. Incremental file identity checks are the next step in the roadmap.
 
 ## ⚡ Performance
 
-VibeSorter is designed for large personal image collections rather than one-image demos. Analysis uses concurrent workers and lightweight local features, while later commands can build on persistent local analysis data instead of repeatedly decoding the same images.
+VibeSorter is designed for large personal image collections rather than one-image demos. Analysis uses concurrent workers and lightweight local features. Persistent local analysis data prevents callers using the library API from repeatedly decoding unchanged images.
 
 ## 🗺️ Roadmap
 
-### Phase 1 — Foundation
+### Core architecture
+
+- [x] Single `src/vibesorter` package tree
+- [x] Persistent local analysis index/cache
+- [ ] Incremental scanning and file identity tracking
+- [ ] Classifier evaluation and confidence calibration
+
+### Detection
 
 - [x] Recursive image discovery
 - [x] Local visual feature extraction
 - [x] Vibe classification
-- [x] Concurrent analysis
-- [x] CLI reports and JSON output
-- [x] Single `src/vibesorter` package tree
-- [ ] Persistent local analysis index
-- [ ] Incremental scanning
-- [ ] Classifier evaluation and confidence calibration
-
-### Phase 2 — Better understanding
-
-- [ ] Improve vibe scoring and calibration
-- [ ] Detect text-heavy / screenshot-like images separately
 - [x] Duplicate / near-duplicate awareness
 - [ ] Improve handling of unusual image formats
+- [ ] Detect text-heavy / screenshot-like images separately
 
-### Phase 3 — Actual organization
+### Organization
 
+- [x] Concurrent analysis
+- [x] CLI reports and JSON output
 - [x] Generate proposed folder structures
 - [x] Let users review proposed moves
 - [x] User-confirmed sorting
 - [x] Safe undo / rollback
 
-### Phase 4 — Visual interface
+### Interface
 
 - [x] Image-grid preview
+- [ ] Image search and filtering
 - [ ] Interactive vibe browser
 - [ ] Desktop application
-- [ ] Search and filtering
 
 ## 🔒 Privacy
 
@@ -88,7 +98,7 @@ VibeSorter is **local-first**. Your images stay on your machine during analysis.
 - Pillow
 - `argparse`
 - `ThreadPoolExecutor`
-- Local image analysis
+- Local JSON analysis cache
 - CLI-first workflow
 
 ## 📄 License
