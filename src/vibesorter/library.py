@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .cache import AnalysisCache
@@ -16,6 +16,9 @@ class LibraryAnalysisStats:
     analyzed: int
     skipped: int
     removed_from_cache: int
+
+    def to_dict(self) -> dict[str, int]:
+        return asdict(self)
 
 
 def analyze_library(
@@ -48,10 +51,4 @@ def analyze_library_stats(folder: str | Path, *, recursive: bool = False) -> Lib
     results = [analyze_image(image, cache=cache) for image in images]
     cache.save()
     cached = sum(result.cached for result in results)
-    return LibraryAnalysisStats(
-        total=len(results),
-        cached=cached,
-        analyzed=len(results) - cached,
-        skipped=0,
-        removed_from_cache=removed,
-    )
+    return LibraryAnalysisStats(len(results), cached, len(results) - cached, 0, removed)
