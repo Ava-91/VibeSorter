@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from .cache import AnalysisCache
@@ -8,15 +9,44 @@ from .pipeline import AnalysisResult, analyze_image
 from .scanner import find_images
 
 
+@dataclass(frozen=True, slots=True)
+class LibraryAnalysisStats:
+    total: int
+    cached: int
+    analyzed: int
+    skipped: int
+    removed_from_cache: int
+
+
 def analyze_library(
     folder: str | Path,
     *,
     recursive: bool = False,
     cache_path: str | Path | None = None,
+    on_progress: Callable[[int, int, Path, bool], None] | None = None,
 ) -> Iterator[AnalysisResult]:
-    """Analyze a library while persisting results in a local JSON index."""
+    """Analyze a library while persisting results in a local, incremental index."""
     root = Path(folder).expanduser()
     cache = AnalysisCache(cache_path or root / ".vibesorter" / "analysis.json")
-    for image in find_images(root, recursive=recursive):
-        yield analyze_image(image, cache=cache)
+    images = find_images(root, recursive=recursive)
+    cache.remove_missing()
+    total = len(images)
+    for index, image in enumerate(images, start=1):
+        result = analyze_image(image, cache=cache)
+        if on_progress is not None:
+            on_progress(index, total, image, result.cached)
+        yield result
     cache.save()
+
+
+def analyze_library_stats(folder: str | Path, *, recursive: bool = False) -> LibraryAnalysisStats:
+    """Run incremental analysis and return cache-hit statistics."""
+    results = list(analyze_library(folder, recursive=recursive))
+    cached = sum(result.cached for result in results)
+    return LibraryAnalysisStats(
+        total=len(results),
+        cached=cached,
+        analyzed=len(results) - cached,
+        skipped=0,
+        removed_from_cache=0,
+    )
