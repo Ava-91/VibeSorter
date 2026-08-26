@@ -54,6 +54,45 @@ Available search filters include:
 - `--limit` — maximum number of returned results
 - `--json` — machine-readable results for scripts and future interfaces
 
+## ✨ DEVELOPMENT CHANGE
+
+### VibeSorter 0.8.1 — a better CLI for a growing image library
+
+VibeSorter is no longer just a detector you run once and forget about. The development focus has moved toward making the tool practical for **large, already-analyzed collections**.
+
+#### 🔎 Cached image search
+
+The new `search` command queries the local `.vibesorter/analysis.json` index instead of touching every image again. You can filter thousands of analyzed images by:
+
+- vibe
+- minimum score
+- filename or path
+- text/screenshot likelihood
+- brightness
+- saturation
+- contrast
+- result limit
+
+This keeps exploration fast while preserving the local-first design.
+
+#### 🖥️ `--help` got a real refresh
+
+The CLI help now explains the command families, gives clearer descriptions for every command, documents important safety behavior, and includes a copy-paste workflow from **analyze → search → propose → review → gallery → apply → rollback**.
+
+Try:
+
+```bash
+vibesorter --help
+vibesorter search --help
+vibesorter propose --help
+```
+
+#### 🔒 Safety remains the rule
+
+Detection, statistics, duplicate checks, search, proposals, reviews, and galleries are read-only with respect to the source library. Actual filesystem changes still require explicit confirmation.
+
+> **Development direction:** VibeSorter is intentionally staying a **vibe detector first**. Text-heavy images, screenshots, people, and semantic image understanding are not being treated as core classification targets yet.
+
 ## 🐍 Python API
 
 For applications or scripts that need persistent local and incremental analysis:
