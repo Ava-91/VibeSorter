@@ -35,9 +35,24 @@ vibesorter scan "path/to/photos"
 vibesorter preview "path/to/photos"
 vibesorter analyze "path/to/photo.jpg"
 vibesorter stats "path/to/photos"
+vibesorter search "path/to/photos" --vibe "Dark / Moody"
+vibesorter search "path/to/photos" --min-score 0.80 --path "billie"
+vibesorter search "path/to/photos" --min-brightness 0.65 --max-saturation 0.75 --limit 50
 ```
 
-The analysis commands are read-only with respect to source images.
+`search` reads the existing `.vibesorter/analysis.json` index. It does **not** rescan the folder or re-analyze images, making it suitable for thousands of already-analyzed images. Search is read-only with respect to source images.
+
+Available search filters include:
+
+- `--vibe` — exact best-vibe category
+- `--min-score` — minimum best-vibe score
+- `--max-text-likelihood` — exclude text-heavy/screenshot-like images above a threshold
+- `--path` — case-insensitive filename/path substring
+- `--min/max-brightness`
+- `--min/max-saturation`
+- `--min/max-contrast`
+- `--limit` — maximum number of returned results
+- `--json` — machine-readable results for scripts and future interfaces
 
 ## 🐍 Python API
 
@@ -50,6 +65,18 @@ for result in analyze_library("path/to/photos"):
     print(result.path, result.best.name, result.best.score, result.cached)
 
 print(analyze_library_stats("path/to/photos").to_dict())
+```
+
+Search uses the same query concepts independently of the CLI:
+
+```python
+from vibesorter.cache import AnalysisCache
+from vibesorter.search import ImageQuery, search_cache
+
+cache = AnalysisCache("path/to/photos/.vibesorter/analysis.json")
+results = search_cache(cache, ImageQuery(vibe="Retro Blue", min_score=0.75, limit=25))
+for result in results:
+    print(result.path, result.best.name, result.best.score)
 ```
 
 For evaluation:
@@ -66,7 +93,7 @@ print(calibrator.report())
 
 ## ⚡ Performance
 
-VibeSorter is designed for large personal image collections rather than one-image demos. Lightweight feature extraction plus local incremental caching means repeated library operations can spend their time on new or changed images instead of the entire collection.
+VibeSorter is designed for large personal image collections rather than one-image demos. Lightweight feature extraction plus local incremental caching means repeated library operations can spend their time on new or changed images instead of the entire collection. Cached search takes this one step further: once a library has been analyzed, filters operate on stored results without touching image pixels.
 
 ## 🗺️ Roadmap
 
@@ -98,7 +125,7 @@ VibeSorter is designed for large personal image collections rather than one-imag
 ### Interface
 
 - [x] Image-grid preview
-- [ ] Image search and filtering
+- [x] Image search and filtering
 - [ ] Interactive vibe browser
 - [ ] Desktop application
 
