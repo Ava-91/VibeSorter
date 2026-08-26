@@ -5,6 +5,7 @@ from .evaluation import ClassificationMetrics, ConfidenceCalibrator, ConfidenceO
 from .features import ColorSample, ImageFeatures, extract_features
 from .library import LibraryAnalysisStats, analyze_library, analyze_library_stats
 from .pipeline import AnalysisResult, analyze_folder, analyze_image
+from .search import ImageQuery, search_cache
 from .vibes import VIBES, VibeScore, classify, score_vibes
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "ConfidenceCalibrator",
     "ConfidenceObservation",
     "ImageFeatures",
+    "ImageQuery",
     "LabelledImage",
     "LibraryAnalysisStats",
     "VIBES",
@@ -29,4 +31,5 @@ __all__ = [
     "extract_features",
     "load_labels",
     "score_vibes",
+    "search_cache",
 ]
