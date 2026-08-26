@@ -9,8 +9,13 @@ from pathlib import Path
 from .features import ColorSample, ImageFeatures
 from .vibes import VibeScore
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 DEFAULT_CACHE_PATH = Path(".vibesorter") / "analysis.json"
+
+
+def _identity(path: Path) -> dict[str, int]:
+    stat = path.stat()
+    return {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
 
 
 def _feature_to_dict(features: ImageFeatures) -> dict:
@@ -33,10 +38,7 @@ def _feature_from_dict(data: dict) -> ImageFeatures:
         dark_ratio=float(data["dark_ratio"]),
         light_ratio=float(data["light_ratio"]),
         text_likelihood=float(data["text_likelihood"]),
-        colors=tuple(
-            ColorSample(tuple(item["rgb"]), float(item["proportion"]))
-            for item in data.get("colors", [])
-        ),
+        colors=tuple(ColorSample(tuple(item["rgb"]), float(item["proportion"])) for item in data.get("colors", [])),
     )
 
 
@@ -54,7 +56,7 @@ def _result_from_dict(data: dict) -> tuple[ImageFeatures, tuple[VibeScore, ...]]
 
 
 class AnalysisCache:
-    """Small versioned JSON cache for local image analysis results."""
+    """Versioned local cache whose entries are invalidated when files change."""
 
     def __init__(self, path: str | Path = DEFAULT_CACHE_PATH) -> None:
         self.path = Path(path).expanduser()
@@ -73,17 +75,32 @@ class AnalysisCache:
         self._entries = data["entries"]
 
     def get(self, path: str | Path) -> tuple[ImageFeatures, tuple[VibeScore, ...]] | None:
-        entry = self._entries.get(str(Path(path).expanduser()))
+        image_path = Path(path).expanduser()
+        entry = self._entries.get(str(image_path))
         if entry is None:
             return None
         try:
+            if entry.get("identity") != _identity(image_path):
+                return None
             return _result_from_dict(entry["result"])
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, OSError, TypeError, ValueError):
             return None
 
     def set(self, path: str | Path, features: ImageFeatures, scores: tuple[VibeScore, ...]) -> None:
-        key = str(Path(path).expanduser())
-        self._entries[key] = {"result": _result_to_dict(features, scores)}
+        image_path = Path(path).expanduser()
+        try:
+            identity = _identity(image_path)
+        except OSError:
+            identity = {"size": -1, "mtime_ns": -1}
+        self._entries[str(image_path)] = {"identity": identity, "result": _result_to_dict(features, scores)}
+
+    def remove_missing(self) -> int:
+        removed = 0
+        for key in list(self._entries):
+            if not Path(key).exists():
+                del self._entries[key]
+                removed += 1
+        return removed
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
