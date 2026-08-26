@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from .cache import AnalysisCache
 from .features import ImageFeatures, extract_features
 from .scanner import find_images
 from .vibes import VibeScore, score_vibes
@@ -15,13 +16,27 @@ class AnalysisResult:
     features: ImageFeatures
     best: VibeScore
     scores: tuple[VibeScore, ...]
+    cached: bool = False
 
 
-def analyze_image(path: Path) -> AnalysisResult:
-    """Analyze one image locally and retain its visual feature signals."""
-    features = extract_features(path)
+def analyze_image(
+    path: Path,
+    *,
+    cache: AnalysisCache | None = None,
+) -> AnalysisResult:
+    """Analyze one image and optionally reuse/store its local cached result."""
+    image_path = Path(path).expanduser()
+    if cache is not None:
+        cached = cache.get(image_path)
+        if cached is not None:
+            features, scores = cached
+            return AnalysisResult(image_path, features, scores[0], scores, cached=True)
+
+    features = extract_features(image_path)
     scores = score_vibes(features)
-    return AnalysisResult(path=path, features=features, best=scores[0], scores=scores)
+    if cache is not None:
+        cache.set(image_path, features, scores)
+    return AnalysisResult(image_path, features, scores[0], scores)
 
 
 def analyze_folder(
@@ -29,12 +44,15 @@ def analyze_folder(
     *,
     recursive: bool = False,
     on_progress: Callable[[int, int, Path], None] | None = None,
+    cache: AnalysisCache | None = None,
 ) -> Iterator[AnalysisResult]:
-    """Analyze images lazily so large folders stay memory-friendly."""
+    """Analyze images lazily, optionally reusing a persistent local cache."""
     images = find_images(folder, recursive=recursive)
     total = len(images)
     for index, path in enumerate(images, start=1):
-        result = analyze_image(path)
+        result = analyze_image(path, cache=cache)
         if on_progress is not None:
             on_progress(index, total, path)
         yield result
+    if cache is not None:
+        cache.save()
