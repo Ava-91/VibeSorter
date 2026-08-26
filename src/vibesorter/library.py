@@ -40,13 +40,18 @@ def analyze_library(
 
 
 def analyze_library_stats(folder: str | Path, *, recursive: bool = False) -> LibraryAnalysisStats:
-    """Run incremental analysis and return cache-hit statistics."""
-    results = list(analyze_library(folder, recursive=recursive))
+    """Run incremental analysis and report cache hits plus stale entries removed."""
+    root = Path(folder).expanduser()
+    cache = AnalysisCache(root / ".vibesorter" / "analysis.json")
+    removed = cache.remove_missing()
+    images = find_images(root, recursive=recursive)
+    results = [analyze_image(image, cache=cache) for image in images]
+    cache.save()
     cached = sum(result.cached for result in results)
     return LibraryAnalysisStats(
         total=len(results),
         cached=cached,
         analyzed=len(results) - cached,
         skipped=0,
-        removed_from_cache=0,
+        removed_from_cache=removed,
     )
