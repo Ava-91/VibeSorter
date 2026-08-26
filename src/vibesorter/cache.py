@@ -86,6 +86,18 @@ class AnalysisCache:
         except (KeyError, OSError, TypeError, ValueError):
             return None
 
+    def entries(self) -> tuple[tuple[Path, ImageFeatures, tuple[VibeScore, ...]], ...]:
+        """Return valid cached results without rescanning or re-analyzing images."""
+        results: list[tuple[Path, ImageFeatures, tuple[VibeScore, ...]]] = []
+        for key in self._entries:
+            try:
+                result = self.get(key)
+            except OSError:
+                result = None
+            if result is not None:
+                results.append((Path(key), result[0], result[1]))
+        return tuple(results)
+
     def set(self, path: str | Path, features: ImageFeatures, scores: tuple[VibeScore, ...]) -> None:
         image_path = Path(path).expanduser()
         try:

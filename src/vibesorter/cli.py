@@ -16,6 +16,8 @@ from .pipeline import analyze_image
 from .proposal import build_proposal, proposal_from_dict, proposal_to_dict, proposal_to_json
 from .review import ReviewedOperation, parse_selection, review_proposal
 from .scanner import find_images
+from .search import ImageQuery, search_cache
+from .cache import AnalysisCache
 from .vibes import VIBES, confidence_score
 
 
@@ -35,8 +37,17 @@ def _add_filter_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument("--max-text-likelihood", type=float, default=1.0, help="Skip images whose text/screenshot likelihood exceeds this value (default: 1).")
 
 
+def _add_dimension_arguments(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--min-brightness", type=float)
+    command.add_argument("--max-brightness", type=float)
+    command.add_argument("--min-saturation", type=float)
+    command.add_argument("--max-saturation", type=float)
+    command.add_argument("--min-contrast", type=float)
+    command.add_argument("--max-contrast", type=float)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="vibesorter", description="Detect visual vibes in local images and safely review, apply, undo, or inspect organization plans.", epilog="Examples: vibesorter preview ./photos | vibesorter propose ./photos --output proposal.json | vibesorter review proposal.json --accept 1,3-5 --output reviewed.json | vibesorter gallery proposal.json --output gallery.html | vibesorter apply reviewed.json --confirm | vibesorter rollback BATCH_ID --confirm")
+    parser = argparse.ArgumentParser(prog="vibesorter", description="Detect visual vibes in local images and safely review, apply, undo, or inspect organization plans.", epilog="Examples: vibesorter preview ./photos | vibesorter search ./photos --vibe 'Dark / Moody' | vibesorter propose ./photos --output proposal.json | vibesorter review proposal.json --accept 1,3-5 --output reviewed.json | vibesorter gallery proposal.json --output gallery.html | vibesorter apply reviewed.json --confirm | vibesorter rollback BATCH_ID --confirm")
     parser.add_argument("--version", action="version", version="VibeSorter 0.8.0")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -44,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     preview = subparsers.add_parser("preview", help="Detect vibes for a folder without changing files."); _add_folder_argument(preview); _add_workers_argument(preview); _add_filter_arguments(preview); preview.add_argument("--top", type=int, default=5); preview.add_argument("--json", action="store_true")
     analyze = subparsers.add_parser("analyze", help="Detect the vibe of one image and show its ranking."); analyze.add_argument("image", type=Path); analyze.add_argument("--json", action="store_true")
     stats = subparsers.add_parser("stats", help="Summarize vibe counts for a folder."); _add_folder_argument(stats); _add_workers_argument(stats); _add_filter_arguments(stats); stats.add_argument("--json", action="store_true")
+    search = subparsers.add_parser("search", help="Search an existing local analysis cache without rescanning or re-analyzing images."); search.add_argument("folder", type=Path, help="Analyzed image library containing .vibesorter/analysis.json."); search.add_argument("--vibe", choices=VIBES); search.add_argument("--min-score", type=float, default=0.0); search.add_argument("--max-text-likelihood", type=float, default=1.0); search.add_argument("--path", dest="path_contains", help="Case-insensitive filename/path substring."); _add_dimension_arguments(search); search.add_argument("--limit", type=int); search.add_argument("--json", action="store_true")
     duplicates = subparsers.add_parser("duplicates", help="Find exact and visually near-duplicate images (read-only)."); _add_folder_argument(duplicates); duplicates.add_argument("--max-distance", type=int, default=DEFAULT_MAX_DISTANCE); duplicates.add_argument("--json", action="store_true")
     propose = subparsers.add_parser("propose", help="Generate a deterministic, read-only folder organization proposal."); _add_folder_argument(propose); _add_workers_argument(propose); _add_filter_arguments(propose); propose.add_argument("--output-root", type=Path, default=Path("VibeSorted")); propose.add_argument("--output", type=Path); propose.add_argument("--json", action="store_true")
     review = subparsers.add_parser("review", help="Review a saved proposal without changing files."); review.add_argument("proposal", type=Path); review.add_argument("--accept", default="", help="Accept operation IDs/ranges, e.g. 1,3-5 or all."); review.add_argument("--reject", default="", help="Reject operation IDs/ranges, e.g. 2,7-9 or all."); review.add_argument("--accept-vibe", action="append", default=[], help="Accept every operation for this vibe; repeatable."); review.add_argument("--reject-vibe", action="append", default=[], help="Reject every operation for this vibe; repeatable."); review.add_argument("--output", type=Path, help="Write the reviewed JSON to this path."); review.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
@@ -75,6 +87,13 @@ def _validate_filters(args, parser):
     if hasattr(args, "max_text_likelihood") and not 0 <= args.max_text_likelihood <= 1: parser.error("--max-text-likelihood must be between 0 and 1")
     if hasattr(args, "max_distance") and args.max_distance < 1: parser.error("--max-distance must be at least 1")
     if getattr(args, "top", 1) < 1: parser.error("--top must be at least 1")
+    for name in ("min_brightness", "max_brightness", "min_saturation", "max_saturation", "min_contrast", "max_contrast"):
+        value = getattr(args, name, None)
+        if value is not None and not 0 <= value <= 1: parser.error(f"--{name.replace('_', '-')} must be between 0 and 1")
+    if getattr(args, "limit", None) is not None and args.limit < 1: parser.error("--limit must be at least 1")
+    if getattr(args, "min_brightness", None) is not None and getattr(args, "max_brightness", None) is not None and args.min_brightness > args.max_brightness: parser.error("--min-brightness cannot exceed --max-brightness")
+    if getattr(args, "min_saturation", None) is not None and getattr(args, "max_saturation", None) is not None and args.min_saturation > args.max_saturation: parser.error("--min-saturation cannot exceed --max-saturation")
+    if getattr(args, "min_contrast", None) is not None and getattr(args, "max_contrast", None) is not None and args.min_contrast > args.max_contrast: parser.error("--min-contrast cannot exceed --max-contrast")
 
 
 def _analyze_folder(images, workers, *, vibe=None, min_score=0.0, max_text_likelihood=1.0, show_progress=True):
@@ -95,6 +114,23 @@ def _analyze_folder(images, workers, *, vibe=None, min_score=0.0, max_text_likel
 
 def _json_groups(groups, top=None):
     return {name: {"count": len(items), "examples": [{"path": str(path), "score": round(score, 4), "text_likelihood": round(text, 4)} for path, score, text in (items if top is None else items[:top])], "average_score": round(sum(score for _, score, _ in items) / len(items), 4)} for name, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0]))}
+
+
+def _run_search(args, parser) -> int:
+    root = args.folder.expanduser()
+    cache_path = root / ".vibesorter" / "analysis.json"
+    if not cache_path.is_file():
+        parser.error(f"no analysis cache found at {cache_path}; run an incremental library analysis first")
+    query = ImageQuery(vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, path_contains=args.path_contains, min_brightness=args.min_brightness, max_brightness=args.max_brightness, min_saturation=args.min_saturation, max_saturation=args.max_saturation, min_contrast=args.min_contrast, max_contrast=args.max_contrast, limit=args.limit)
+    results = search_cache(AnalysisCache(cache_path), query)
+    if args.json:
+        print(json.dumps({"count": len(results), "results": [{"path": str(r.path), "vibe": r.best.name, "score": round(r.best.score, 4), "text_likelihood": round(r.features.text_likelihood, 4), "brightness": round(r.features.brightness, 4), "saturation": round(r.features.saturation, 4), "contrast": round(r.features.contrast, 4)} for r in results]}, indent=2, ensure_ascii=False))
+        return 0
+    print(f"Found {len(results)} matching cached image(s).\n")
+    for result in results:
+        print(f"{result.best.name:<18} {result.best.score:>5.0%}  {result.path}")
+    print("\nSearch is read-only; no images were analyzed, created, moved, copied, renamed, deleted, or modified.")
+    return 0
 
 
 def _run_review(args, parser):
@@ -156,13 +192,14 @@ def _run_rollback(args, parser):
 def _run_history(args):
     records = list_history(args.history)
     if args.json: print(json.dumps(records, indent=2, ensure_ascii=False)); return 0
-    if not records: print(f"No history recorded in {args.history.expanduser()}"); return 0
+    if not records: print(f"No history recorded in {args.history}"); return 0
     for item in records: print(f"{item.get('timestamp','')}  {item.get('batch_id','')}  op {item.get('operation_id','?')}  {item.get('source','')} -> {item.get('destination','')}")
     return 0
 
 
 def main() -> int:
     parser = build_parser(); args = parser.parse_args()
+    if args.command == "search": _validate_filters(args, parser); return _run_search(args, parser)
     if args.command == "review": return _run_review(args, parser)
     if args.command == "gallery":
         try: output = gallery_from_file(args.proposal, args.output)
@@ -199,7 +236,7 @@ def main() -> int:
     if args.command == "stats":
         if args.json: print(json.dumps({"total": len(images), "analyzed": len(images)-skipped, "skipped": skipped, "vibes": _json_groups(groups)}, indent=2)); return 0
         print(f"Analyzing {len(images)} image(s) for vibe statistics...\n\n=== Vibe statistics ==="); [print(f"{n:<18} {len(i):>5} image(s)  avg confidence {sum(s for _,s,_ in i)/len(i):.0%}") for n,i in sorted(groups.items(), key=lambda x:(-len(x[1]),x[0]))]; print(f"\nTotal: {len(images)-skipped} analyzed, {skipped} skipped."); return 0
-    if args.json: print(json.dumps({"total": len(images), "analyzed": len(images)-skipped, "skipped": skipped, "vibes": _json_groups(groups, args.top)}, indent=2)); return 0
+    if args.json: print(json.dumps({"total": len(images), "analyzed": len(images)-skipped, "skipped": skipped, "vibes": _json_groups(groups, args.top)}, indent=2, ensure_ascii=False)); return 0
     print(f"Analyzing {len(images)} image(s) locally in {args.folder.expanduser()}\n\n=== Proposed vibe folders ===")
     for name, items in sorted(groups.items(), key=lambda x:(-len(x[1]),x[0])):
         print(f"\n{name} — {len(items)} image(s)"); [print(f"  {s:>5.0%}  {p}") for p,s,_ in items[:args.top]]
