@@ -70,9 +70,58 @@ class ConfidenceObservation:
 
 def collect_confidence_observations(labels: tuple[LabelledImage, ...]) -> tuple[ConfidenceObservation, ...]:
     """Collect heuristic confidence and correctness for a labelled dataset."""
-    observations: list[ConfidenceObservation] = []
-    for item in labels:
-        scores = score_vibes(extract_features(item.path))
-        predicted = scores[0].name
-        observations.append(ConfidenceObservation(item.label, predicted, confidence_score(scores), predicted == item.label))
-    return tuple(observations)
+    return tuple(
+        ConfidenceObservation(item.label, scores[0].name, confidence_score(scores), scores[0].name == item.label)
+        for item in labels
+        for scores in (score_vibes(extract_features(item.path)),)
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationBin:
+    lower: float
+    upper: float
+    count: int
+    mean_confidence: float
+    accuracy: float
+
+
+class ConfidenceCalibrator:
+    """Fit an empirical confidence correction from labelled observations."""
+
+    def __init__(self, bins: int = 10) -> None:
+        if bins < 1:
+            raise ValueError("bins must be at least 1")
+        self.bins = bins
+        self._calibration: tuple[CalibrationBin, ...] = ()
+
+    def fit(self, observations: tuple[ConfidenceObservation, ...]) -> "ConfidenceCalibrator":
+        width = 1.0 / self.bins
+        fitted: list[CalibrationBin] = []
+        for index in range(self.bins):
+            lower = index * width
+            upper = 1.0 if index == self.bins - 1 else (index + 1) * width
+            bucket = [item for item in observations if lower <= item.raw_confidence < upper or (upper == 1.0 and item.raw_confidence <= upper)]
+            if not bucket:
+                fitted.append(CalibrationBin(lower, upper, 0, 0.0, 0.0))
+                continue
+            mean = sum(item.raw_confidence for item in bucket) / len(bucket)
+            accuracy = sum(item.correct for item in bucket) / len(bucket)
+            fitted.append(CalibrationBin(lower, upper, len(bucket), round(mean, 4), round(accuracy, 4)))
+        self._calibration = tuple(fitted)
+        return self
+
+    @property
+    def bins_report(self) -> tuple[CalibrationBin, ...]:
+        return self._calibration
+
+    def transform(self, confidence: float) -> float:
+        """Map a raw confidence to empirical observed accuracy."""
+        value = max(0.0, min(1.0, confidence))
+        if not self._calibration:
+            return value
+        for item in self._calibration:
+            if item.count and item.lower <= value < item.upper:
+                return item.accuracy
+        populated = [item for item in self._calibration if item.count]
+        return populated[-1].accuracy if populated else value
