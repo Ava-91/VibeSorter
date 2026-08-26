@@ -16,7 +16,7 @@ These are **visual vibes, not semantic labels**. VibeSorter currently does not t
 
 The detector uses lightweight local image features including brightness, saturation, contrast, warm/cool balance, grayscale content, dark/light ratios, and dominant colors. Analysis runs through the single packaged `src/vibesorter/` implementation.
 
-For repeated library analysis, the Python API can persist results in a local `.vibesorter/analysis.json` index. The cache is versioned, written atomically, and ignored when it is malformed or incompatible.
+Repeated library analysis can persist results in a local `.vibesorter/analysis.json` index. Each entry records the source file size and nanosecond modification time. If either changes, the image is analyzed again. Missing files can be pruned from the index.
 
 ## 📦 Installation
 
@@ -39,20 +39,22 @@ The analysis commands are read-only with respect to source images.
 
 ## 🐍 Python API
 
-For applications or scripts that need persistent local analysis:
+For applications or scripts that need persistent local and incremental analysis:
 
 ```python
-from vibesorter import analyze_library
+from vibesorter import analyze_library, analyze_library_stats
 
 for result in analyze_library("path/to/photos"):
     print(result.path, result.best.name, result.best.score, result.cached)
+
+print(analyze_library_stats("path/to/photos").to_dict())
 ```
 
-The first run extracts features. Later runs can reuse cached results for the same image paths. Incremental file identity checks are the next step in the roadmap.
+The first run extracts features. Later runs reuse unchanged results. New files are analyzed, changed files invalidate their old entries, and missing files can be removed from the active cache.
 
 ## ⚡ Performance
 
-VibeSorter is designed for large personal image collections rather than one-image demos. Analysis uses concurrent workers and lightweight local features. Persistent local analysis data prevents callers using the library API from repeatedly decoding unchanged images.
+VibeSorter is designed for large personal image collections rather than one-image demos. Lightweight feature extraction plus local incremental caching means repeated library operations can spend their time on new or changed images instead of the entire collection.
 
 ## 🗺️ Roadmap
 
@@ -60,7 +62,7 @@ VibeSorter is designed for large personal image collections rather than one-imag
 
 - [x] Single `src/vibesorter` package tree
 - [x] Persistent local analysis index/cache
-- [ ] Incremental scanning and file identity tracking
+- [x] Incremental scanning and file identity tracking
 - [ ] Classifier evaluation and confidence calibration
 
 ### Detection
