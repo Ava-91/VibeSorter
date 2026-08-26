@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .features import extract_features
@@ -39,6 +39,9 @@ class ClassificationMetrics:
     accuracy: float
     per_vibe: dict[str, dict[str, float | int]]
     confusion_matrix: dict[str, dict[str, int]]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 def evaluate_labels(labels: tuple[LabelledImage, ...]) -> ClassificationMetrics:
@@ -118,10 +121,12 @@ class ConfidenceCalibrator:
     def transform(self, confidence: float) -> float:
         """Map a raw confidence to empirical observed accuracy."""
         value = max(0.0, min(1.0, confidence))
-        if not self._calibration:
-            return value
         for item in self._calibration:
             if item.count and item.lower <= value < item.upper:
                 return item.accuracy
         populated = [item for item in self._calibration if item.count]
         return populated[-1].accuracy if populated else value
+
+    def report(self) -> list[dict[str, float | int]]:
+        """Return a JSON-friendly calibration report."""
+        return [asdict(item) for item in self._calibration]
