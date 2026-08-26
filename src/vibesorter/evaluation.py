@@ -47,7 +47,6 @@ def evaluate_labels(labels: tuple[LabelledImage, ...]) -> ClassificationMetrics:
     for item in labels:
         predicted = classify(extract_features(item.path)).name
         matrix[item.label][predicted] += 1
-
     total = sum(sum(row.values()) for row in matrix.values())
     correct = sum(matrix[vibe][vibe] for vibe in VIBES)
     per_vibe: dict[str, dict[str, float | int]] = {}
@@ -58,11 +57,22 @@ def evaluate_labels(labels: tuple[LabelledImage, ...]) -> ClassificationMetrics:
         precision = true_positive / predicted if predicted else 0.0
         recall = true_positive / actual if actual else 0.0
         per_vibe[vibe] = {"support": actual, "precision": round(precision, 4), "recall": round(recall, 4)}
+    return ClassificationMetrics(total, correct, round(correct / total, 4) if total else 0.0, per_vibe, matrix)
 
-    return ClassificationMetrics(
-        total=total,
-        correct=correct,
-        accuracy=round(correct / total, 4) if total else 0.0,
-        per_vibe=per_vibe,
-        confusion_matrix=matrix,
-    )
+
+@dataclass(frozen=True, slots=True)
+class ConfidenceObservation:
+    label: str
+    predicted: str
+    raw_confidence: float
+    correct: bool
+
+
+def collect_confidence_observations(labels: tuple[LabelledImage, ...]) -> tuple[ConfidenceObservation, ...]:
+    """Collect heuristic confidence and correctness for a labelled dataset."""
+    observations: list[ConfidenceObservation] = []
+    for item in labels:
+        scores = score_vibes(extract_features(item.path))
+        predicted = scores[0].name
+        observations.append(ConfidenceObservation(item.label, predicted, confidence_score(scores), predicted == item.label))
+    return tuple(observations)
