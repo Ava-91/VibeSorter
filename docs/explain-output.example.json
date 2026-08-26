@@ -1,0 +1,9 @@
+{
+  "path": "image.jpg",
+  "winner": "Retro Blue",
+  "confidence": 0.81,
+  "margin": 0.16,
+  "ambiguous": false,
+  "scores": [["Retro Blue", 0.82], ["Soft / Pastel", 0.66]],
+  "features": {"brightness": 0.52, "saturation": 0.34}
+}
