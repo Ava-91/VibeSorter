@@ -18,6 +18,8 @@ The detector uses lightweight local image features including brightness, saturat
 
 Repeated library analysis can persist results in a local `.vibesorter/analysis.json` index. Each entry records the source file size and nanosecond modification time. If either changes, the image is analyzed again. Missing files can be pruned from the index.
 
+Classifier quality can be evaluated against a local human-labelled JSONL dataset. Vibe accuracy, per-vibe precision/recall, confusion matrices, raw confidence observations, and empirical calibration bins are available through the Python API.
+
 ## 📦 Installation
 
 Python 3.10+ is required.
@@ -50,7 +52,17 @@ for result in analyze_library("path/to/photos"):
 print(analyze_library_stats("path/to/photos").to_dict())
 ```
 
-The first run extracts features. Later runs reuse unchanged results. New files are analyzed, changed files invalidate their old entries, and missing files can be removed from the active cache.
+For evaluation:
+
+```python
+from vibesorter import ConfidenceCalibrator, collect_confidence_observations, evaluate_labels, load_labels
+
+labels = load_labels("evaluation.jsonl")
+metrics = evaluate_labels(labels)
+calibrator = ConfidenceCalibrator().fit(collect_confidence_observations(labels))
+print(metrics.to_dict())
+print(calibrator.report())
+```
 
 ## ⚡ Performance
 
@@ -63,7 +75,7 @@ VibeSorter is designed for large personal image collections rather than one-imag
 - [x] Single `src/vibesorter` package tree
 - [x] Persistent local analysis index/cache
 - [x] Incremental scanning and file identity tracking
-- [ ] Classifier evaluation and confidence calibration
+- [x] Classifier evaluation and confidence calibration
 
 ### Detection
 
@@ -101,6 +113,7 @@ VibeSorter is **local-first**. Your images stay on your machine during analysis.
 - `argparse`
 - `ThreadPoolExecutor`
 - Local JSON analysis cache
+- Deterministic feature-based classifier
 - CLI-first workflow
 
 ## 📄 License
