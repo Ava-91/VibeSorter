@@ -13,7 +13,7 @@ authors = [{name = "Ava"}]
 dependencies = ["Pillow>=10.0"]
 
 [project.scripts]
-vibesorter = "vibesorter.cli:main"
+vibesorter = "vibesorter.entrypoint:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
