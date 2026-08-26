@@ -38,31 +38,75 @@ def _add_filter_arguments(command: argparse.ArgumentParser) -> None:
 
 
 def _add_dimension_arguments(command: argparse.ArgumentParser) -> None:
-    command.add_argument("--min-brightness", type=float)
-    command.add_argument("--max-brightness", type=float)
-    command.add_argument("--min-saturation", type=float)
-    command.add_argument("--max-saturation", type=float)
-    command.add_argument("--min-contrast", type=float)
-    command.add_argument("--max-contrast", type=float)
+    command.add_argument("--min-brightness", type=float, help="Minimum brightness from 0 to 1.")
+    command.add_argument("--max-brightness", type=float, help="Maximum brightness from 0 to 1.")
+    command.add_argument("--min-saturation", type=float, help="Minimum saturation from 0 to 1.")
+    command.add_argument("--max-saturation", type=float, help="Maximum saturation from 0 to 1.")
+    command.add_argument("--min-contrast", type=float, help="Minimum contrast from 0 to 1.")
+    command.add_argument("--max-contrast", type=float, help="Maximum contrast from 0 to 1.")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="vibesorter", description="Detect visual vibes in local images and safely review, apply, undo, or inspect organization plans.", epilog="Examples: vibesorter preview ./photos | vibesorter search ./photos --vibe 'Dark / Moody' | vibesorter propose ./photos --output proposal.json | vibesorter review proposal.json --accept 1,3-5 --output reviewed.json | vibesorter gallery proposal.json --output gallery.html | vibesorter apply reviewed.json --confirm | vibesorter rollback BATCH_ID --confirm")
-    parser.add_argument("--version", action="version", version="VibeSorter 0.8.0")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser(
+        prog="vibesorter",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Detect visual vibes in local images and safely organize large image libraries.",
+        epilog="""Workflow examples:
+  Analyze a library:   vibesorter preview ./photos
+  Search the cache:    vibesorter search ./photos --vibe 'Dark / Moody'
+  Inspect one image:   vibesorter analyze ./photo.jpg
+  Find duplicates:     vibesorter duplicates ./photos
+  Make a plan:         vibesorter propose ./photos --output proposal.json
+  Review a plan:       vibesorter review proposal.json --accept 1,3-5 --output reviewed.json
+  Build a gallery:     vibesorter gallery proposal.json --output gallery.html
+  Apply reviewed moves:vibesorter apply reviewed.json --confirm
+  Undo a batch:        vibesorter rollback BATCH_ID --confirm
 
-    scan = subparsers.add_parser("scan", help="Discover supported images (read-only)."); _add_folder_argument(scan)
-    preview = subparsers.add_parser("preview", help="Detect vibes for a folder without changing files."); _add_folder_argument(preview); _add_workers_argument(preview); _add_filter_arguments(preview); preview.add_argument("--top", type=int, default=5); preview.add_argument("--json", action="store_true")
-    analyze = subparsers.add_parser("analyze", help="Detect the vibe of one image and show its ranking."); analyze.add_argument("image", type=Path); analyze.add_argument("--json", action="store_true")
-    stats = subparsers.add_parser("stats", help="Summarize vibe counts for a folder."); _add_folder_argument(stats); _add_workers_argument(stats); _add_filter_arguments(stats); stats.add_argument("--json", action="store_true")
-    search = subparsers.add_parser("search", help="Search an existing local analysis cache without rescanning or re-analyzing images."); search.add_argument("folder", type=Path, help="Analyzed image library containing .vibesorter/analysis.json."); search.add_argument("--vibe", choices=VIBES); search.add_argument("--min-score", type=float, default=0.0); search.add_argument("--max-text-likelihood", type=float, default=1.0); search.add_argument("--path", dest="path_contains", help="Case-insensitive filename/path substring."); _add_dimension_arguments(search); search.add_argument("--limit", type=int); search.add_argument("--json", action="store_true")
-    duplicates = subparsers.add_parser("duplicates", help="Find exact and visually near-duplicate images (read-only)."); _add_folder_argument(duplicates); duplicates.add_argument("--max-distance", type=int, default=DEFAULT_MAX_DISTANCE); duplicates.add_argument("--json", action="store_true")
-    propose = subparsers.add_parser("propose", help="Generate a deterministic, read-only folder organization proposal."); _add_folder_argument(propose); _add_workers_argument(propose); _add_filter_arguments(propose); propose.add_argument("--output-root", type=Path, default=Path("VibeSorted")); propose.add_argument("--output", type=Path); propose.add_argument("--json", action="store_true")
-    review = subparsers.add_parser("review", help="Review a saved proposal without changing files."); review.add_argument("proposal", type=Path); review.add_argument("--accept", default="", help="Accept operation IDs/ranges, e.g. 1,3-5 or all."); review.add_argument("--reject", default="", help="Reject operation IDs/ranges, e.g. 2,7-9 or all."); review.add_argument("--accept-vibe", action="append", default=[], help="Accept every operation for this vibe; repeatable."); review.add_argument("--reject-vibe", action="append", default=[], help="Reject every operation for this vibe; repeatable."); review.add_argument("--output", type=Path, help="Write the reviewed JSON to this path."); review.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-    gallery = subparsers.add_parser("gallery", help="Build a local image-grid gallery from an existing proposal (no re-analysis)."); gallery.add_argument("proposal", type=Path, help="Proposal or reviewed proposal JSON."); gallery.add_argument("--output", type=Path, default=Path("vibesorter-gallery.html"), help="HTML output path.")
-    apply = subparsers.add_parser("apply", help="Apply only accepted operations from a reviewed proposal."); apply.add_argument("reviewed", type=Path, help="Reviewed proposal JSON produced by the review command."); apply.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); apply.add_argument("--dry-run", action="store_true", help="Show what would move without changing files."); apply.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Where to record successful moves."); apply.add_argument("--json", action="store_true", help="Print machine-readable results.")
-    rollback = subparsers.add_parser("rollback", help="Safely undo a completed sorting batch."); rollback.add_argument("batch_id", help="Batch ID printed by apply."); rollback.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); rollback.add_argument("--dry-run", action="store_true", help="Check what would be restored without changing files."); rollback.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Move history JSONL file."); rollback.add_argument("--json", action="store_true")
-    history = subparsers.add_parser("history", help="Inspect recorded sorting operations."); history.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl")); history.add_argument("--json", action="store_true")
+Read-only commands never modify your images. Filesystem changes require explicit --confirm.""",
+    )
+    parser.add_argument("--version", action="version", version="VibeSorter 0.8.1")
+    subparsers = parser.add_subparsers(dest="command", required=True, title="commands", metavar="COMMAND")
+
+    scan = subparsers.add_parser("scan", help="Discover supported images (read-only).", description="List supported images without analyzing or changing them.")
+    _add_folder_argument(scan)
+
+    preview = subparsers.add_parser("preview", help="Analyze a folder and show its vibe distribution.", description="Analyze images locally and print their detected vibe, confidence, and path.")
+    _add_folder_argument(preview); _add_workers_argument(preview); _add_filter_arguments(preview); preview.add_argument("--top", type=int, default=5, help="Examples to print per vibe (default: 5)."); preview.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    analyze = subparsers.add_parser("analyze", help="Analyze one image in detail.", description="Show the best vibe, confidence, text/screenshot likelihood, and full vibe ranking for one image.")
+    analyze.add_argument("image", type=Path, help="Image file to analyze."); analyze.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    stats = subparsers.add_parser("stats", help="Summarize vibe counts for a folder.", description="Analyze a folder and report counts and average confidence for each detected vibe.")
+    _add_folder_argument(stats); _add_workers_argument(stats); _add_filter_arguments(stats); stats.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    search = subparsers.add_parser("search", help="Search the existing analysis cache (fast, read-only).", description="Query .vibesorter/analysis.json without rescanning or re-analyzing images.")
+    search.add_argument("folder", type=Path, help="Analyzed image library containing .vibesorter/analysis.json.")
+    search.add_argument("--vibe", choices=VIBES, help="Only return images with this best vibe.")
+    search.add_argument("--min-score", type=float, default=0.0, help="Minimum vibe score from 0 to 1.")
+    search.add_argument("--max-text-likelihood", type=float, default=1.0, help="Maximum text/screenshot likelihood from 0 to 1.")
+    search.add_argument("--path", dest="path_contains", help="Case-insensitive filename/path substring.")
+    _add_dimension_arguments(search); search.add_argument("--limit", type=int, help="Maximum number of matching results."); search.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    duplicates = subparsers.add_parser("duplicates", help="Find exact and visually near-duplicate images.", description="Compare images for exact hashes and perceptual near-duplicates. This command is read-only.")
+    _add_folder_argument(duplicates); duplicates.add_argument("--max-distance", type=int, default=DEFAULT_MAX_DISTANCE, help=f"Maximum perceptual distance for near duplicates (default: {DEFAULT_MAX_DISTANCE})."); duplicates.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    propose = subparsers.add_parser("propose", help="Generate a safe folder organization proposal.", description="Create a deterministic JSON plan for sorting images by vibe. No files are moved.")
+    _add_folder_argument(propose); _add_workers_argument(propose); _add_filter_arguments(propose); propose.add_argument("--output-root", type=Path, default=Path("VibeSorted"), help="Root folder proposed for organized images (default: VibeSorted)."); propose.add_argument("--output", type=Path, help="Write the proposal JSON to this path."); propose.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    review = subparsers.add_parser("review", help="Review a saved organization proposal.", description="Accept or reject proposed moves without touching the source images.")
+    review.add_argument("proposal", type=Path, help="Proposal JSON produced by propose."); review.add_argument("--accept", default="", help="Accept operation IDs/ranges, e.g. 1,3-5 or all."); review.add_argument("--reject", default="", help="Reject operation IDs/ranges, e.g. 2,7-9 or all."); review.add_argument("--accept-vibe", action="append", default=[], help="Accept every operation for this vibe; repeatable."); review.add_argument("--reject-vibe", action="append", default=[], help="Reject every operation for this vibe; repeatable."); review.add_argument("--output", type=Path, help="Write the reviewed JSON to this path."); review.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    gallery = subparsers.add_parser("gallery", help="Build a local HTML image gallery.", description="Build an image-grid gallery from an existing proposal without re-analysis.")
+    gallery.add_argument("proposal", type=Path, help="Proposal or reviewed proposal JSON."); gallery.add_argument("--output", type=Path, default=Path("vibesorter-gallery.html"), help="HTML output path (default: vibesorter-gallery.html).")
+
+    apply = subparsers.add_parser("apply", help="Apply accepted filesystem moves.", description="Apply only accepted operations from a reviewed proposal. Requires explicit --confirm unless using --dry-run.")
+    apply.add_argument("reviewed", type=Path, help="Reviewed proposal JSON produced by review."); apply.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); apply.add_argument("--dry-run", action="store_true", help="Show what would move without changing files."); apply.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Where to record successful moves."); apply.add_argument("--json", action="store_true", help="Print machine-readable results.")
+
+    rollback = subparsers.add_parser("rollback", help="Undo a completed sorting batch.", description="Restore files from a recorded apply batch. Requires explicit --confirm unless using --dry-run.")
+    rollback.add_argument("batch_id", help="Batch ID printed by apply."); rollback.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); rollback.add_argument("--dry-run", action="store_true", help="Check what would be restored without changing files."); rollback.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Move history JSONL file."); rollback.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    history = subparsers.add_parser("history", help="Inspect recorded sorting operations.", description="Show successful sorting operations recorded by apply.")
+    history.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Move history JSONL file."); history.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     return parser
 
 
