@@ -10,7 +10,6 @@ from .vibes import VibeScore
 
 SCHEMA_VERSION = 1
 DEFAULT_SQLITE_PATH = Path('.vibesorter') / 'analysis.db'
-LEGACY_JSON_PATH = Path('.vibesorter') / 'analysis.json'
 
 def _identity(path: Path) -> tuple[int, int]:
     stat = path.stat(); return stat.st_size, stat.st_mtime_ns
@@ -31,16 +30,21 @@ class SQLiteAnalysisCache:
         self.connection.executescript('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS images (path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, features TEXT NOT NULL, scores TEXT NOT NULL); CREATE INDEX IF NOT EXISTS idx_images_mtime ON images(mtime_ns);')
         self.connection.execute("INSERT OR IGNORE INTO metadata(key,value) VALUES('schema_version',?)", (str(SCHEMA_VERSION),)); self.connection.commit()
     def _migrate_legacy_json(self) -> None:
-        if self.connection.execute('SELECT 1 FROM images LIMIT 1').fetchone() is not None or not LEGACY_JSON_PATH.is_file(): return
-        try: data = json.loads(LEGACY_JSON_PATH.read_text(encoding='utf-8'))
-        except (OSError, json.JSONDecodeError, TypeError): return
-        if not isinstance(data.get('entries'), dict): return
-        for path, entry in data['entries'].items():
-            try:
-                identity, result = entry.get('identity', {}), entry['result']
-                self.connection.execute('INSERT OR REPLACE INTO images(path,size,mtime_ns,features,scores) VALUES(?,?,?,?,?)', (path, int(identity.get('size', -1)), int(identity.get('mtime_ns', -1)), json.dumps(result['features'], ensure_ascii=False), json.dumps(result['scores'])))
-            except (KeyError, TypeError, ValueError): continue
-        self.connection.commit()
+        legacy_path = self.path.with_suffix('.json')
+        had_legacy = legacy_path.is_file()
+        if self.connection.execute('SELECT 1 FROM images LIMIT 1').fetchone() is None and had_legacy:
+            try: data = json.loads(legacy_path.read_text(encoding='utf-8'))
+            except (OSError, json.JSONDecodeError, TypeError): data = {}
+            if isinstance(data.get('entries'), dict):
+                for path, entry in data['entries'].items():
+                    try:
+                        identity, result = entry.get('identity', {}), entry['result']
+                        self.connection.execute('INSERT OR REPLACE INTO images(path,size,mtime_ns,features,scores) VALUES(?,?,?,?,?)', (path, int(identity.get('size', -1)), int(identity.get('mtime_ns', -1)), json.dumps(result['features'], ensure_ascii=False), json.dumps(result['scores'])))
+                    except (KeyError, TypeError, ValueError): continue
+                self.connection.commit()
+        if not had_legacy:
+            try: legacy_path.write_text(json.dumps({'backend': 'sqlite', 'database': self.path.name}) + '\n', encoding='utf-8')
+            except OSError: pass
     def get(self, path: str | Path):
         image_path = Path(path).expanduser()
         try: identity = _identity(image_path)
