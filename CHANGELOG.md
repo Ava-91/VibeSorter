@@ -30,10 +30,19 @@ All notable development changes to VibeSorter are documented here.
 - Serializable explanation output.
 - Human and JSON output examples plus interpretation guidance.
 
+### Added — vibe intelligence and scale
+- Lightweight 2x2 spatial image features and center-vs-edge deltas.
+- Overlap-aware multi-vibe selection while preserving a primary vibe.
+- Offline nearest-centroid learned classifier with JSON persistence.
+- Classifier comparison API for learned vs heuristic evaluation.
+- SQLite analysis cache with automatic legacy JSON migration.
+- Richer explain diagnostics with feature signals and selected secondary vibes.
+
 ### Development notes
 - The benchmark and explain features are deliberately separated into reusable engines and documented CLI contracts so presentation can stay thin and future interfaces can reuse the same logic.
 - Benchmarking remains read-only with respect to source images.
 - Explainability describes the current feature-based heuristic; it does not claim semantic image understanding.
+- The new learned classifier is an offline comparison path; the heuristic classifier remains the compatibility baseline.
 
 ## 0.8.1
 

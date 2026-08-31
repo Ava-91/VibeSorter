@@ -1,15 +1,16 @@
+from pathlib import Path
+
+from PIL import Image
+
 from vibesorter.explain import explain_image
 
 
-def test_explanation_contains_scores_and_features(image_factory):
-    path = image_factory("sample.png", (40, 100, 210))
+def test_explain_includes_selected_vibes_and_signals(tmp_path):
+    path = Path(tmp_path) / 'sample.png'
+    Image.new('RGB', (32, 32), (20, 30, 70)).save(path)
     explanation = explain_image(path)
     assert explanation.winner
-    assert explanation.scores
-    assert explanation.features
-    assert 0 <= explanation.confidence <= 1
-
-
-def test_explanation_is_serializable(image_factory):
-    path = image_factory("sample.png")
-    assert explain_image(path).to_dict()["path"] == str(path)
+    assert explanation.selected_vibes
+    assert 'brightness' in explanation.feature_signals
+    assert 'center_brightness_delta' in explanation.feature_signals
+    assert explanation.to_dict()['path'] == str(path)
