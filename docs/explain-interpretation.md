@@ -1,8 +1,7 @@
-# Reading an explanation
+# Interpreting explanations
 
-A high winner score alone does not guarantee a clear decision. The margin matters:
+A high winner score does not mean certainty. Check the winner margin and `ambiguous` flag. When a second vibe is close enough to the winner, `selected_vibes` exposes it instead of hiding the overlap.
 
-- **large margin**: the winner is clearly separated from alternatives
-- **small margin**: the image is visually ambiguous under the current heuristic
+Feature signals are the raw visual measurements available to the deterministic classifier. They are useful for debugging and comparing classifier behavior, not as claims about the semantic content of an image.
 
-Confidence is a heuristic indicator rather than a calibrated probability unless separately calibrated against labelled data.
+For example, a high `dark_ratio` and high `contrast` support a Dark / Moody score, while a negative center brightness delta means the center is darker than the surrounding regions.
