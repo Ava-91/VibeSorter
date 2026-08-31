@@ -1,9 +1,16 @@
 {
-  "path": "image.jpg",
-  "winner": "Retro Blue",
+  "path": "photos/example.jpg",
+  "winner": "Dark / Moody",
   "confidence": 0.81,
-  "margin": 0.16,
-  "ambiguous": false,
-  "scores": [["Retro Blue", 0.82], ["Soft / Pastel", 0.66]],
-  "features": {"brightness": 0.52, "saturation": 0.34}
+  "margin": 0.06,
+  "ambiguous": true,
+  "selected_vibes": [["Dark / Moody", 0.82], ["Retro Blue", 0.76]],
+  "scores": [["Dark / Moody", 0.82], ["Retro Blue", 0.76], ["Soft / Pastel", 0.31]],
+  "feature_signals": {
+    "brightness": 0.22,
+    "saturation": 0.58,
+    "contrast": 0.74,
+    "dark_ratio": 0.81,
+    "center_brightness_delta": -0.11
+  }
 }
