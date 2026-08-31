@@ -1,19 +1,14 @@
-# Explaining a classification
+# `vibesorter explain`
 
-The explanation layer exposes the information behind a prediction:
+`explain` is intended to answer *why* an image received its classification rather than presenting a single mysterious score.
 
-- winning vibe
-- confidence heuristic
-- score margin over the runner-up
-- ambiguity flag
-- full ranked candidate scores
-- extracted visual features
+The explanation includes:
 
-The planned CLI surface is:
+- primary winner and raw score
+- runner-up scores and winner margin
+- ambiguity/uncertainty information
+- selected secondary vibes
+- the main visual feature signals used by the deterministic classifier
+- full extracted feature data in JSON mode
 
-```bash
-vibesorter explain image.jpg
-vibesorter explain image.jpg --json
-```
-
-It is read-only and exists for debugging and trust, not semantic image recognition.
+The feature signals are measurements, not generated prose. VibeSorter does not claim to recognize objects or infer semantic meaning from them.
