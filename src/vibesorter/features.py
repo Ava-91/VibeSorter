@@ -6,8 +6,6 @@ import math
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-# 64x64 keeps enough detail for vibe classification while cutting per-image
-# pixel work by more than half compared with the previous 96x96 analysis size.
 ANALYSIS_SIZE = (64, 64)
 PALETTE_SIZE = 6
 
@@ -16,6 +14,14 @@ PALETTE_SIZE = 6
 class ColorSample:
     rgb: tuple[int, int, int]
     proportion: float
+
+
+@dataclass(frozen=True, slots=True)
+class SpatialRegion:
+    brightness: float
+    saturation: float
+    warm_ratio: float
+    cool_ratio: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +39,9 @@ class ImageFeatures:
     light_ratio: float
     text_likelihood: float
     colors: tuple[ColorSample, ...]
+    regions: tuple[SpatialRegion, ...] = ()
+    center_brightness_delta: float = 0.0
+    center_saturation_delta: float = 0.0
 
 
 def _text_likelihood(image: Image.Image, grayscale_ratio: float, contrast: float) -> float:
@@ -61,15 +70,39 @@ def _text_likelihood(image: Image.Image, grayscale_ratio: float, contrast: float
     ))
 
 
+def _region_features(image: Image.Image) -> tuple[SpatialRegion, ...]:
+    width, height = image.size
+    regions: list[SpatialRegion] = []
+    for row in range(2):
+        for column in range(2):
+            left, top = column * width // 2, row * height // 2
+            right, bottom = (column + 1) * width // 2, (row + 1) * height // 2
+            pixels = list(image.crop((left, top, right, bottom)).convert("HSV").getdata())
+            if not pixels:
+                regions.append(SpatialRegion(0.0, 0.0, 0.0, 0.0))
+                continue
+            brightness = sum(v for _, _, v in pixels) / len(pixels) / 255.0
+            saturation = sum(s for _, s, _ in pixels) / len(pixels) / 255.0
+            warm = cool = 0
+            for hue, sat, _ in pixels:
+                if sat < 0.18:
+                    continue
+                normalized = hue / 255.0
+                if normalized < 0.16 or normalized >= 0.92:
+                    warm += 1
+                elif 0.48 <= normalized <= 0.72:
+                    cool += 1
+            regions.append(SpatialRegion(brightness, saturation, warm / len(pixels), cool / len(pixels)))
+    return tuple(regions)
+
+
 def extract_features(path: str | Path) -> ImageFeatures:
-    """Extract lightweight visual signals, normalizing EXIF orientation safely."""
+    """Extract lightweight global and spatial visual signals."""
     image_path = Path(path).expanduser()
     try:
         with Image.open(image_path) as source:
             source.verify()
         with Image.open(image_path) as source:
-            # EXIF orientation is applied to the in-memory image only; the file
-            # on disk is never rewritten.
             image = ImageOps.exif_transpose(source).convert("RGB")
             image.thumbnail(ANALYSIS_SIZE, Image.Resampling.LANCZOS)
             hsv_image = image.convert("HSV")
@@ -113,6 +146,11 @@ def extract_features(path: str | Path) -> ImageFeatures:
     grayscale_ratio = grayscale / count
     top = sorted(counts.items(), key=lambda item: item[1], reverse=True)[:PALETTE_SIZE]
     colors = tuple(ColorSample(rgb=color, proportion=amount / count) for color, amount in top)
+    regions = _region_features(image)
+    center = regions[3] if regions else SpatialRegion(0.0, 0.0, 0.0, 0.0)
+    edge_regions = regions[:3]
+    edge_brightness = sum(item.brightness for item in edge_regions) / len(edge_regions) if edge_regions else center.brightness
+    edge_saturation = sum(item.saturation for item in edge_regions) / len(edge_regions) if edge_regions else center.saturation
 
     return ImageFeatures(
         path=image_path,
@@ -128,4 +166,7 @@ def extract_features(path: str | Path) -> ImageFeatures:
         light_ratio=light / count,
         text_likelihood=_text_likelihood(image, grayscale_ratio, contrast),
         colors=colors,
+        regions=regions,
+        center_brightness_delta=round(center.brightness - edge_brightness, 4),
+        center_saturation_delta=round(center.saturation - edge_saturation, 4),
     )
