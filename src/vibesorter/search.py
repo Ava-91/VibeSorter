@@ -8,11 +8,8 @@ from .features import ImageFeatures
 from .pipeline import AnalysisResult
 from .vibes import VibeScore
 
-
 @dataclass(frozen=True, slots=True)
 class ImageQuery:
-    """Pure search criteria shared by the CLI and future interfaces."""
-
     vibe: str | None = None
     min_score: float = 0.0
     max_text_likelihood: float = 1.0
@@ -24,40 +21,27 @@ class ImageQuery:
     min_contrast: float | None = None
     max_contrast: float | None = None
     limit: int | None = None
-
+    include_secondary_vibes: bool = True
 
 def _matches(result: AnalysisResult, query: ImageQuery) -> bool:
     features = result.features
-    if query.vibe is not None and result.best.name != query.vibe:
-        return False
-    if result.best.score < query.min_score:
-        return False
-    if features.text_likelihood > query.max_text_likelihood:
-        return False
+    if query.vibe is not None:
+        matching = result.scores if query.include_secondary_vibes else (result.best,)
+        if not any(score.name == query.vibe and score.score >= query.min_score for score in matching): return False
+    elif result.best.score < query.min_score: return False
+    if features.text_likelihood > query.max_text_likelihood: return False
     path_text = str(result.path).casefold()
-    if query.path_contains is not None and query.path_contains.casefold() not in path_text:
-        return False
-    dimensions = (
-        (features.brightness, query.min_brightness, query.max_brightness),
-        (features.saturation, query.min_saturation, query.max_saturation),
-        (features.contrast, query.min_contrast, query.max_contrast),
-    )
-    for value, minimum, maximum in dimensions:
-        if minimum is not None and value < minimum:
-            return False
-        if maximum is not None and value > maximum:
-            return False
+    if query.path_contains is not None and query.path_contains.casefold() not in path_text: return False
+    for value, minimum, maximum in ((features.brightness, query.min_brightness, query.max_brightness), (features.saturation, query.min_saturation, query.max_saturation), (features.contrast, query.min_contrast, query.max_contrast)):
+        if minimum is not None and value < minimum: return False
+        if maximum is not None and value > maximum: return False
     return True
 
-
 def search_cache(cache: AnalysisCache, query: ImageQuery) -> tuple[AnalysisResult, ...]:
-    """Search valid cached results only; this function never analyzes images."""
-    matches: list[AnalysisResult] = []
+    """Search valid cached results without touching source image pixels."""
+    matches = []
     for path, features, scores in cache.entries():
         result = AnalysisResult(path, features, scores[0], scores, cached=True)
-        if _matches(result, query):
-            matches.append(result)
+        if _matches(result, query): matches.append(result)
     matches.sort(key=lambda result: (-result.best.score, str(result.path).casefold()))
-    if query.limit is not None:
-        return tuple(matches[:query.limit])
-    return tuple(matches)
+    return tuple(matches[:query.limit]) if query.limit is not None else tuple(matches)
