@@ -43,6 +43,30 @@ def test_browser_filters_without_rescan(tmp_path: Path):
     assert [r["path"] for r in _rows(db, "Retro Blue", None)] == ["a.png"]
 
 
+def test_browser_filters_current_sqlite_scores_including_secondary_vibes(tmp_path: Path):
+    db = tmp_path / "analysis.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE images (path TEXT PRIMARY KEY, size INTEGER, mtime_ns INTEGER, features TEXT, scores TEXT)")
+        conn.executemany(
+            "INSERT INTO images VALUES (?, ?, ?, ?, ?)",
+            [
+                ("a.png", 1, 1, "{}", json.dumps([{ "name": "Dark / Moody", "score": 0.8 }, { "name": "Retro Blue", "score": 0.7 }])),
+                ("b.png", 1, 1, "{}", json.dumps([{ "name": "Soft / Pastel", "score": 0.8 }, { "name": "Retro Blue", "score": 0.7 }])),
+            ],
+        )
+        conn.commit()
+    assert [r["path"] for r in _rows(db, "Retro Blue", None)] == ["a.png", "b.png"]
+
+
+def test_browser_path_search_is_case_insensitive(tmp_path: Path):
+    db = tmp_path / "analysis.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE analysis (path TEXT, vibe TEXT)")
+        conn.executemany("INSERT INTO analysis VALUES (?, ?)", [("Photos/Billie.png", "Dark / Moody"), ("Photos/Other.png", "Retro Blue")])
+        conn.commit()
+    assert [r["path"] for r in _rows(db, None, "billie")] == ["Photos/Billie.png"]
+
+
 def test_browser_paginates_cached_rows(tmp_path: Path):
     db = tmp_path / "analysis.db"
     with sqlite3.connect(db) as conn:
@@ -61,9 +85,9 @@ def test_browser_vibe_summary_uses_current_sqlite_scores(tmp_path: Path):
     with sqlite3.connect(db) as conn:
         conn.execute("CREATE TABLE images (path TEXT PRIMARY KEY, size INTEGER, mtime_ns INTEGER, features TEXT, scores TEXT)")
         rows = [
-            ("a.png", 1, 1, "{}", json.dumps([{"name": "Dark / Moody", "score": 0.8}, {"name": "Retro Blue", "score": 0.5}])),
-            ("b.png", 1, 1, "{}", json.dumps([{ "name": "Dark / Moody", "score": 0.7}, {"name": "Retro Blue", "score": 0.4}])),
-            ("c.png", 1, 1, "{}", json.dumps([{ "name": "Soft / Pastel", "score": 0.7}, {"name": "Bright / Colorful", "score": 0.4}])),
+            ("a.png", 1, 1, "{}", json.dumps([{ "name": "Dark / Moody", "score": 0.8 }, { "name": "Retro Blue", "score": 0.5 }])),
+            ("b.png", 1, 1, "{}", json.dumps([{ "name": "Dark / Moody", "score": 0.7 }, { "name": "Retro Blue", "score": 0.4 }])),
+            ("c.png", 1, 1, "{}", json.dumps([{ "name": "Soft / Pastel", "score": 0.7 }, { "name": "Bright / Colorful", "score": 0.4 }])),
         ]
         conn.executemany("INSERT INTO images VALUES (?, ?, ?, ?, ?)", rows)
         conn.commit()
