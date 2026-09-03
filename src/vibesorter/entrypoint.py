@@ -10,9 +10,10 @@ from .evaluation import evaluate_dataset, load_labels
 from .explain import explain_image
 from .learned import LearnedClassifier
 from .indexer import index_folder
+from .label_sampling import sample_labels
 from .cli import main as legacy_main
 
-_NEW_COMMANDS = {"benchmark", "evaluate", "explain", "train", "index", "browser", "desktop"}
+_NEW_COMMANDS = {"benchmark", "evaluate", "explain", "train", "index", "sample-labels", "browser", "desktop"}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -47,6 +48,12 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--no-recursive", action="store_true")
     command.add_argument("--workers", type=int, default=8)
     command.add_argument("--json", action="store_true")
+
+    command = subparsers.add_parser("sample-labels", help="Create a deterministic JSONL template for human labelling.")
+    command.add_argument("folder", type=Path)
+    command.add_argument("--count", type=int, required=True, help="Number of images to sample.")
+    command.add_argument("--output", type=Path, default=Path("labels.jsonl"))
+    command.add_argument("--no-recursive", action="store_true")
 
     command = subparsers.add_parser("browser", help="Open the local cached-analysis browser.")
     command.add_argument("--db", type=Path, default=Path(".vibesorter/analysis.db"))
@@ -177,6 +184,24 @@ def _run_index(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
     return 0
 
 
+def _run_sample_labels(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    if args.count < 1:
+        parser.error("--count must be at least 1")
+    try:
+        data = sample_labels(
+            args.folder.expanduser(),
+            count=args.count,
+            output=args.output.expanduser(),
+            recursive=not args.no_recursive,
+        )
+    except (FileNotFoundError, NotADirectoryError, ValueError, OSError) as exc:
+        parser.error(str(exc))
+    print(f"Sampled {data['selected']} image(s) from {data['available']}")
+    print(f"Label template: {data['output']}")
+    print("Fill each empty label with one of VibeSorter's supported vibe names before running evaluate.")
+    return 0
+
+
 def _run_browser(args: argparse.Namespace) -> int:
     from .browser.server import run_server
     run_server(args.db, args.host, args.port)
@@ -204,6 +229,8 @@ def main() -> int:
             return _run_explain(args, parser)
         if args.command == "index":
             return _run_index(args, parser)
+        if args.command == "sample-labels":
+            return _run_sample_labels(args, parser)
         if args.command == "browser":
             return _run_browser(args)
         return _run_desktop(args)
@@ -215,6 +242,7 @@ def main() -> int:
         print("  explain IMAGE     Explain the prediction, confidence, scores, and feature signals.")
         print("  train LABELS      Fit the offline learned classifier from labelled JSONL.")
         print("  index FOLDER      Incrementally persist folder analysis to SQLite.")
+        print("  sample-labels FOLDER  Create a deterministic human-labeling template.")
         print("  browser           Browse cached analysis in a local browser UI.")
         print("  desktop           Launch the local desktop shell.")
         return 0

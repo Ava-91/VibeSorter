@@ -2,11 +2,23 @@
 
 VibeSorter can evaluate its deterministic heuristic classifier against a human-labelled JSONL dataset without modifying or uploading source images.
 
-## 1. Create a labelled sample
+## 1. Create a representative label sample
 
-For a real image library, choose a representative subset rather than only the easiest images. Include different lighting, color palettes, subjects, crops, and borderline cases. Keep the source images where they are; only their paths and labels need to be recorded.
+For a real image library, use the built-in sampler to create a deterministic subset rather than manually collecting paths:
 
-Each JSONL line has this shape:
+```bash
+vibesorter sample-labels "E:\\Ava files\\Pictures\\Billie Eilish" --count 150 --output labels.jsonl
+```
+
+The sampler discovers supported image files, selects evenly distributed paths from the sorted file list, and writes only paths plus blank labels. Re-running against an unchanged folder produces the same sample. It never copies or modifies source images.
+
+Use `--no-recursive` if only the top-level folder should be considered. The output defaults to `labels.jsonl` when `--output` is omitted.
+
+Open `labels.jsonl` in a text editor and fill every empty `label` with the vibe that a human believes best describes that image. Do not evaluate the template while labels are blank: `vibesorter evaluate` requires valid vibe names.
+
+Include different lighting, color palettes, subjects, crops, and borderline cases. A representative sample is more useful than choosing only easy examples.
+
+Each completed JSONL line has this shape:
 
 ```json
 {"path":"E:/Ava files/Pictures/Billie Eilish/example.jpg","label":"Retro Blue"}
