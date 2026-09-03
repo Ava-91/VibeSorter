@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from ..vibes import VibeScore, confidence_score
 from .ui import render_page
 
 DEFAULT_LIMIT = 48
@@ -37,11 +38,10 @@ def _normalize_row(row: sqlite3.Row, columns: dict[str, str]) -> dict:
     if scores and (vibe is None or confidence is None):
         try:
             parsed = json.loads(scores)
-            if parsed:
-                vibe = vibe or parsed[0].get("name")
-                winner = float(parsed[0].get("score", 0.0))
-                runner_up = float(parsed[1].get("score", 0.0)) if len(parsed) > 1 else 0.0
-                confidence = confidence if confidence is not None else round(0.65 * winner + 0.35 * max(0.0, winner - runner_up) / 0.25, 4)
+            parsed_scores = tuple(VibeScore(str(score["name"]), float(score["score"])) for score in parsed)
+            if parsed_scores:
+                vibe = vibe or parsed_scores[0].name
+                confidence = confidence if confidence is not None else confidence_score(parsed_scores)
         except (TypeError, ValueError, KeyError, json.JSONDecodeError):
             pass
     item["path"] = str(path or "")
@@ -135,8 +135,9 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db"):
                 self._send(400, "Invalid pagination", "text/plain; charset=utf-8")
                 return
             if parsed.path == "/api/images":
-                rows, total = _query_rows(db, vibe, query, limit=limit, offset=(page - 1) * min(limit, MAX_LIMIT))
-                payload = {"items": rows, "page": page, "limit": min(max(1, limit), MAX_LIMIT), "total": total}
+                safe_limit = min(max(1, limit), MAX_LIMIT)
+                rows, total = _query_rows(db, vibe, query, limit=safe_limit, offset=(page - 1) * safe_limit)
+                payload = {"items": rows, "page": page, "limit": safe_limit, "total": total}
                 self._send(200, json.dumps(payload, default=str), "application/json; charset=utf-8")
                 return
             if parsed.path == "/api/image":
