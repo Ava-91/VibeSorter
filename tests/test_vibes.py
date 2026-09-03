@@ -5,7 +5,7 @@ from pathlib import Path
 from PIL import Image
 
 from vibesorter.features import ImageFeatures, extract_features
-from vibesorter.vibes import VibeScore, classify, confidence_score, is_confident, score_vibes
+from vibesorter.vibes import VibeScore, classify, confidence_score, is_confident, score_vibe_contributions, score_vibes
 
 
 def make_image(path: Path, color: tuple[int, int, int]) -> None:
@@ -112,3 +112,13 @@ def test_regional_cool_signal_can_support_retro_blue() -> None:
     )
     scores = score_vibes(features)
     assert scores[0].name == "Retro Blue"
+
+
+def test_pastel_darkness_penalty_is_explainable() -> None:
+    features = _feature_snapshot(
+        brightness=0.4079, saturation=0.2811, contrast=0.1977,
+        dark=0.3532, light=0.0174, cool=0.2122,
+    )
+    contributions = score_vibe_contributions(features)["Soft / Pastel"]
+    assert contributions["darkness_penalty"] < 0
+    assert sum(contributions.values()) < 0.45

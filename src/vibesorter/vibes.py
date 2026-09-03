@@ -81,6 +81,10 @@ def _score_components(features: ImageFeatures) -> dict[str, dict[str, float]]:
         },
     }
 
+def _pastel_darkness_penalty(features: ImageFeatures) -> float:
+    """Penalize Soft / Pastel when an image is substantially dark-heavy."""
+    return 0.28 * _clamp((features.dark_ratio - 0.22) / 0.45)
+
 def score_vibe_contributions(features: ImageFeatures) -> dict[str, dict[str, float]]:
     """Return weighted feature contributions for every vibe.
 
@@ -91,8 +95,7 @@ def score_vibe_contributions(features: ImageFeatures) -> dict[str, dict[str, flo
         name: {feature: round(value, 4) for feature, value in components.items()}
         for name, components in _score_components(features).items()
     }
-    dark = features.dark_ratio
-    penalty = 0.28 * _clamp((dark - 0.22) / 0.45)
+    penalty = _pastel_darkness_penalty(features)
     if penalty:
         contributions["Soft / Pastel"]["darkness_penalty"] = round(-penalty, 4)
     return contributions
@@ -101,10 +104,9 @@ def score_vibes(features: ImageFeatures) -> tuple[VibeScore, ...]:
     """Score overlapping atmospheric categories from global and spatial features."""
     components = _score_components(features)
     scores = {name: _clamp(sum(values.values())) for name, values in components.items()}
-    # Calibration: muted/low-contrast is not automatically pastel when the image is dark-heavy.
-    pastel_darkness = _clamp((dark - 0.22) / 0.45)
+    pastel_darkness = _pastel_darkness_penalty(features)
     if pastel_darkness:
-        scores["Soft / Pastel"] = _clamp(scores["Soft / Pastel"] - 0.28 * pastel_darkness)
+        scores["Soft / Pastel"] = _clamp(scores["Soft / Pastel"] - pastel_darkness)
     return tuple(sorted((VibeScore(name, round(score, 4)) for name, score in scores.items()), key=lambda result: result.score, reverse=True))
 
 def select_vibes(scores: tuple[VibeScore, ...], *, threshold: float = DEFAULT_VIBE_THRESHOLD, margin: float = DEFAULT_VIBE_MARGIN) -> tuple[VibeScore, ...]:
