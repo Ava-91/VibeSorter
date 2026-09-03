@@ -20,4 +20,4 @@ def test_project_metadata_uses_src_layout() -> None:
     root = Path(__file__).resolve().parents[1]
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
     assert 'where = ["src"]' in pyproject
-    assert 'vibesorter = "vibesorter.cli:main"' in pyproject
+    assert 'vibesorter = "vibesorter.entrypoint:main"' in pyproject
