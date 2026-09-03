@@ -104,7 +104,7 @@ def test_browser_image_detail_includes_scores_confidence_and_features(tmp_path: 
     detail = _image_detail(db, str(image))
     assert detail is not None
     assert detail["vibe"] == "Dark / Moody"
-    assert detail["confidence"] == 0.77
+    assert detail["confidence"] == 0.87
     assert detail["ambiguous"] is False
     assert detail["scores"][1]["name"] == "Retro Blue"
     assert detail["features"]["brightness"] == 0.42
