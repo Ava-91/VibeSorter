@@ -48,6 +48,11 @@ def _run_explain(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
     for name, score in data['scores']: print(f"  {name:<18} {score:.0%}")
     print("\nFeature signals:")
     for name, value in data['feature_signals'].items(): print(f"  {name}: {value}")
+    print("\nScore contributions:")
+    for name, contributions in data['score_contributions'].items():
+        score = dict(data['scores'])[name]
+        print(f"  {name} ({score:.0%})")
+        for feature, value in contributions.items(): print(f"    {feature:<20} +{value:.4f}")
     return 0
 
 
