@@ -48,6 +48,10 @@ def load_completed_labels(output: str | Path) -> dict[str, str]:
             label = str(data["label"])
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"invalid labeling record on line {line_number}") from exc
+        # Empty labels are intentional in templates created by `sample-labels`.
+        # They represent pending work, not completed human decisions.
+        if not label:
+            continue
         if label not in VIBES:
             raise ValueError(f"unknown vibe label on line {line_number}: {label}")
         completed[image_path] = label
@@ -102,7 +106,6 @@ def build_candidates(
         raise FileNotFoundError(f"analysis database not found: {database}; run index first")
 
     candidates: list[LabelCandidate] = []
-    prefix = str(root)
     with sqlite3.connect(database) as conn:
         rows = conn.execute("SELECT path, scores FROM images ORDER BY path COLLATE NOCASE").fetchall()
     for raw_path, raw_scores in rows:
