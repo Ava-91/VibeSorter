@@ -30,6 +30,31 @@ def test_build_candidates_prioritizes_ambiguous_then_confidence(tmp_path):
     assert [item.path for item in candidates] == [paths[1].resolve(), paths[2].resolve(), paths[0].resolve()]
 
 
+def test_label_session_accepts_sample_labels_template(tmp_path):
+    output = tmp_path / "labels.jsonl"
+    output.write_text(
+        json.dumps({"path": str((tmp_path / "a.jpg").resolve()), "label": ""}) + "\n"
+        + json.dumps({"path": str((tmp_path / "b.jpg").resolve()), "label": "Retro Blue"}) + "\n",
+        encoding="utf-8",
+    )
+    first = _candidate(tmp_path / "a.jpg")
+    second = _candidate(tmp_path / "b.jpg", "Dark / Moody", 0.31)
+    session = LabelSession((first, second), output)
+    assert session.labelled == 1
+    assert session.remaining == (first,)
+    session.decide(first, first.prediction)
+    records = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+    assert {record["label"] for record in records} == {"Retro Blue"}
+    assert len(records) == 2
+
+
+def test_load_completed_labels_still_rejects_unknown_nonempty_label(tmp_path):
+    output = tmp_path / "labels.jsonl"
+    output.write_text(json.dumps({"path": str(tmp_path / "a.jpg"), "label": "Not a vibe"}) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown vibe"):
+        load_completed_labels(output)
+
+
 def test_label_session_persists_and_resumes(tmp_path):
     first = _candidate(tmp_path / "a.jpg")
     second = _candidate(tmp_path / "b.jpg", "Dark / Moody", 0.31)
