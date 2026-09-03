@@ -87,10 +87,15 @@ def score_vibe_contributions(features: ImageFeatures) -> dict[str, dict[str, flo
     The contribution values sum to the corresponding raw vibe score. This
     mirrors ``score_vibes`` without changing its classification behavior.
     """
-    return {
+    contributions = {
         name: {feature: round(value, 4) for feature, value in components.items()}
         for name, components in _score_components(features).items()
     }
+    dark = features.dark_ratio
+    penalty = 0.28 * _clamp((dark - 0.22) / 0.45)
+    if penalty:
+        contributions["Soft / Pastel"]["darkness_penalty"] = round(-penalty, 4)
+    return contributions
 
 def score_vibes(features: ImageFeatures) -> tuple[VibeScore, ...]:
     """Score overlapping atmospheric categories from global and spatial features."""
