@@ -79,7 +79,7 @@ This keeps exploration fast while preserving the local-first design.
 
 #### 🧠 Vibe intelligence
 
-VibeSorter now retains overlapping vibe scores instead of pretending every image has one perfectly isolated aesthetic. Lightweight spatial features add regional context without introducing a heavyweight vision model.
+VibeSorter now retains overlapping vibe scores instead of pretending every image has one perfectly isolated aesthetic. Lightweight spatial features add regional context without introducing a heavyweight vision model. Classifier calibration also distinguishes genuinely light pastel imagery from dark, muted images by applying an explainable darkness penalty to Soft / Pastel scoring.
 
 The project also includes an offline nearest-centroid learned classifier and an evaluation API so data-driven classifier quality can be compared against the deterministic baseline.
 
