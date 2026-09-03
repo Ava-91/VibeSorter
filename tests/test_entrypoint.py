@@ -62,3 +62,25 @@ def test_explain_command_human_output(monkeypatch, capsys, tmp_path):
     output = capsys.readouterr().out
     assert "Winner: Dark / Moody" in output
     assert "Ambiguous: yes" in output
+
+
+def test_index_command_parses_folder_and_options(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(
+        entrypoint,
+        "index_folder",
+        lambda folder, recursive, workers: {
+            "total": 2,
+            "analyzed": 1,
+            "reused": 1,
+            "skipped": 0,
+            "removed": 0,
+            "database": str(tmp_path / ".vibesorter" / "analysis.db"),
+        },
+    )
+    monkeypatch.setattr(sys, "argv", ["vibesorter", "index", str(tmp_path), "--no-recursive", "--workers", "3", "--json"])
+
+    assert entrypoint.main() == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["total"] == 2
+    assert data["analyzed"] == 1
+    assert data["reused"] == 1
