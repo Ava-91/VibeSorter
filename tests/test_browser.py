@@ -135,3 +135,9 @@ def test_browser_renders_lazy_image_grid():
     assert "api/images" in page
     assert "load-more" in page
     assert "api/vibes" in page
+
+
+def test_browser_renders_image_detail_template_without_unescaped_fstring_braces():
+    page = render_page()
+    assert "alt='${escapeHtml(data.vibe||'Image')}'" in page
+    assert "api/image-details?path=${encodeURIComponent(path)}" in page
