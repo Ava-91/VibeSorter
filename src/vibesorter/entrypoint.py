@@ -18,7 +18,7 @@ _NEW_COMMANDS = {"benchmark", "evaluate", "explain", "train", "index", "sample-l
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="vibesorter",",
+        prog="vibesorter",
         description="Detect visual vibes in local images and safely organize large image libraries.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
