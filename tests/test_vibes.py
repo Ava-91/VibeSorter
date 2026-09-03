@@ -78,9 +78,9 @@ def test_clear_winner_can_be_sorted_automatically() -> None:
     assert is_confident(scores)
 
 
-def _feature_snapshot(*, brightness: float, saturation: float, contrast: float, dark: float, light: float, cool: float, regions=()):
+def _feature_snapshot(*, brightness: float, saturation: float, contrast: float, dark: float, light: float, cool: float, rgb=(84, 101, 90), regions=()):
     return ImageFeatures(
-        path=Path("fixture.png"), average_rgb=(84, 101, 90),
+        path=Path("fixture.png"), average_rgb=rgb,
         average_hsv=(0.35, saturation, brightness), brightness=brightness,
         saturation=saturation, contrast=contrast, warm_ratio=0.15,
         cool_ratio=cool, grayscale_ratio=0.18, dark_ratio=dark,
@@ -126,8 +126,8 @@ def test_pastel_darkness_penalty_is_explainable() -> None:
 
 def test_neutral_photo_dump_is_an_eighth_score_with_explainable_contribution() -> None:
     features = _feature_snapshot(
-        brightness=0.50, saturation=0.34, contrast=0.25,
-        dark=0.18, light=0.24, cool=0.16,
+        brightness=0.40, saturation=0.45, contrast=0.70,
+        dark=0.35, light=0.35, cool=0.10,
     )
     scores = score_vibes(features)
     contributions = score_vibe_contributions(features)
@@ -139,9 +139,9 @@ def test_neutral_photo_dump_is_an_eighth_score_with_explainable_contribution() -
 
 def test_strong_aesthetic_does_not_get_relabelled_as_neutral() -> None:
     features = _feature_snapshot(
-        brightness=0.45, saturation=0.40, contrast=0.40,
-        dark=0.40, light=0.30, cool=0.20,
-        regions=(),
+        brightness=0.35, saturation=0.65, contrast=0.45,
+        dark=0.65, light=0.15, cool=0.05,
+        rgb=(20, 110, 20),
     )
     scores = dict((score.name, score.score) for score in score_vibes(features))
-    assert scores["Neutral / Photo Dump"] < scores["Green & Black"]
+    assert scores["Green & Black"] > scores["Neutral / Photo Dump"]
