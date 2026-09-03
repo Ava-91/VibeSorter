@@ -36,32 +36,52 @@ def test_benchmark_rejects_zero_repeats(monkeypatch, tmp_path):
 
 def test_explain_command_json(monkeypatch, capsys, tmp_path):
     image = tmp_path / "image.jpg"
-    monkeypatch.setattr(
-        entrypoint,
-        "explain_image",
-        lambda path: Explanation(Path(path), "Retro Blue", 0.8, 0.2, False, (("Retro Blue", 0.8), ("Dark / Moody", 0.6)), {"brightness": 0.4}),
+    explanation = Explanation(
+        Path(image),
+        "Retro Blue",
+        0.8,
+        0.2,
+        False,
+        (("Retro Blue", 0.8), ("Dark / Moody", 0.6)),
+        (("Retro Blue", 0.8), ("Dark / Moody", 0.6)),
+        {"brightness": 0.4},
+        {"Retro Blue": {"brightness": 0.8}, "Dark / Moody": {"brightness": 0.6}},
+        {"path": Path(image), "brightness": 0.4},
     )
+    monkeypatch.setattr(entrypoint, "explain_image", lambda path: explanation)
     monkeypatch.setattr(sys, "argv", ["vibesorter", "explain", str(image), "--json"])
 
     assert entrypoint.main() == 0
     data = json.loads(capsys.readouterr().out)
     assert data["winner"] == "Retro Blue"
     assert data["scores"][0][0] == "Retro Blue"
+    assert data["score_contributions"]["Retro Blue"]["brightness"] == 0.8
+    assert data["features"]["path"] == str(image)
 
 
 def test_explain_command_human_output(monkeypatch, capsys, tmp_path):
     image = tmp_path / "image.jpg"
-    monkeypatch.setattr(
-        entrypoint,
-        "explain_image",
-        lambda path: Explanation(Path(path), "Dark / Moody", 0.75, 0.1, True, (("Dark / Moody", 0.75),), {"contrast": 0.7}),
+    explanation = Explanation(
+        Path(image),
+        "Dark / Moody",
+        0.75,
+        0.1,
+        True,
+        (("Dark / Moody", 0.75),),
+        (("Dark / Moody", 0.75),),
+        {"contrast": 0.7},
+        {"Dark / Moody": {"contrast": 0.161}},
+        {"path": Path(image), "contrast": 0.7},
     )
+    monkeypatch.setattr(entrypoint, "explain_image", lambda path: explanation)
     monkeypatch.setattr(sys, "argv", ["vibesorter", "explain", str(image)])
 
     assert entrypoint.main() == 0
     output = capsys.readouterr().out
     assert "Winner: Dark / Moody" in output
     assert "Ambiguous: yes" in output
+    assert "Score contributions:" in output
+    assert "contrast" in output
 
 
 def test_index_command_parses_folder_and_options(monkeypatch, capsys, tmp_path):
