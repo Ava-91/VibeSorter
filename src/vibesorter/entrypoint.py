@@ -11,9 +11,10 @@ from .explain import explain_image
 from .learned import LearnedClassifier
 from .indexer import index_folder
 from .label_sampling import sample_labels
+from .labeling import LabelSession, prepare_labeling
 from .cli import main as legacy_main
 
-_NEW_COMMANDS = {"benchmark", "evaluate", "explain", "train", "index", "sample-labels", "browser", "desktop"}
+_NEW_COMMANDS = {"benchmark", "evaluate", "explain", "train", "index", "sample-labels", "label", "browser", "desktop"}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -54,6 +55,16 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--count", type=int, required=True, help="Number of images to sample.")
     command.add_argument("--output", type=Path, default=Path("labels.jsonl"))
     command.add_argument("--no-recursive", action="store_true")
+
+    command = subparsers.add_parser("label", help="Review classifier predictions in a local assisted-labeling browser.")
+    command.add_argument("folder", type=Path)
+    command.add_argument("--count", type=int, required=True, help="Number of candidate images to review.")
+    command.add_argument("--output", type=Path, default=Path("labels.jsonl"), help="Local JSONL file for final human labels.")
+    command.add_argument("--db", type=Path, default=None, help="Analysis SQLite database; defaults to FOLDER/.vibesorter/analysis.db.")
+    command.add_argument("--workers", type=int, default=8)
+    command.add_argument("--all-order", action="store_true", help="Use deterministic path order instead of prioritizing uncertain predictions.")
+    command.add_argument("--host", default="127.0.0.1")
+    command.add_argument("--port", type=int, default=8765)
 
     command = subparsers.add_parser("browser", help="Open the local cached-analysis browser.")
     command.add_argument("--db", type=Path, default=Path(".vibesorter/analysis.db"))
@@ -202,6 +213,35 @@ def _run_sample_labels(args: argparse.Namespace, parser: argparse.ArgumentParser
     return 0
 
 
+def _run_label(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    if args.count < 1:
+        parser.error("--count must be at least 1")
+    if args.workers < 1:
+        parser.error("--workers must be at least 1")
+    if not 1 <= args.port <= 65535:
+        parser.error("--port must be between 1 and 65535")
+    folder = args.folder.expanduser().resolve()
+    db = (args.db.expanduser() if args.db is not None else folder / ".vibesorter" / "analysis.db")
+    try:
+        candidates = prepare_labeling(
+            folder,
+            db=db,
+            count=args.count,
+            workers=args.workers,
+            uncertain_first=not args.all_order,
+        )
+        session = LabelSession(candidates, args.output.expanduser())
+    except (FileNotFoundError, NotADirectoryError, ValueError, OSError) as exc:
+        parser.error(str(exc))
+    if not candidates:
+        parser.error("no cached image predictions are available for this folder")
+    from .browser.server import run_label_server
+    print(f"Prepared {len(candidates)} candidate image(s); {session.labelled} already labelled.")
+    print("Open the local URL in your browser. Press Ctrl+C here to stop the server.")
+    run_label_server(session, db_path=db, host=args.host, port=args.port)
+    return 0
+
+
 def _run_browser(args: argparse.Namespace) -> int:
     from .browser.server import run_server
     run_server(args.db, args.host, args.port)
@@ -231,6 +271,8 @@ def main() -> int:
             return _run_index(args, parser)
         if args.command == "sample-labels":
             return _run_sample_labels(args, parser)
+        if args.command == "label":
+            return _run_label(args, parser)
         if args.command == "browser":
             return _run_browser(args)
         return _run_desktop(args)
@@ -243,6 +285,7 @@ def main() -> int:
         print("  train LABELS      Fit the offline learned classifier from labelled JSONL.")
         print("  index FOLDER      Incrementally persist folder analysis to SQLite.")
         print("  sample-labels FOLDER  Create a deterministic human-labeling template.")
+        print("  label FOLDER      Review predictions in a local assisted-labeling browser.")
         print("  browser           Browse cached analysis in a local browser UI.")
         print("  desktop           Launch the local desktop shell.")
         return 0
