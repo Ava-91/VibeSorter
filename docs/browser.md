@@ -15,6 +15,10 @@ The server binds to `127.0.0.1` by default. Open the printed local URL in a brow
 ```text
 SQLite analysis index
         ↓
+/api/vibes ──────────────┐
+        ↓                 │
+summary/navigation       │
+        │                 │
 /api/images?page=N&limit=48
         ↓
 small result page
@@ -24,7 +28,11 @@ thumbnail grid
 /api/image?path=...
 ```
 
-The browser reads the existing SQLite analysis index. Switching pages or filters does not rescan or re-analyze the image library.
+The browser reads the existing SQLite analysis index. Switching pages, vibes, or text filters does not rescan or re-analyze the image library.
+
+## Vibe navigation
+
+The sidebar lists primary vibes with result counts. Selecting a vibe changes the current image query and keeps pagination bounded. Average confidence is available from the summary API for future summary views.
 
 ## Pagination and loading
 
