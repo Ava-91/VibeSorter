@@ -14,7 +14,7 @@ def render_label_page(session: LabelSession) -> str:
         for index, vibe in enumerate(vibes)
     )
     candidates = [item.to_dict() for item in session.remaining]
-    payload = html.escape(json.dumps(candidates, ensure_ascii=False), quote=True)
+    payload = json.dumps(candidates, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     return f"""<!doctype html>
 <html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>VibeSorter Assisted Labeling</title>
