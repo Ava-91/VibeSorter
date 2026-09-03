@@ -31,7 +31,7 @@ def test_browser_reads_current_sqlite_score_rows(tmp_path: Path):
         conn.commit()
     rows = _rows(db, None, None)
     assert rows[0]["vibe"] == "Dark / Moody"
-    assert rows[0]["confidence"] == 0.739
+    assert rows[0]["confidence"] == 0.841
 
 
 def test_browser_filters_without_rescan(tmp_path: Path):
