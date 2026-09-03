@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .diagnostics import diagnose
 from .features import extract_features
-from .vibes import score_vibes, select_vibes
+from .vibes import score_vibe_contributions, score_vibes, select_vibes
 
 @dataclass(frozen=True, slots=True)
 class Explanation:
@@ -17,9 +17,13 @@ class Explanation:
     selected_vibes: tuple[tuple[str, float], ...]
     scores: tuple[tuple[str, float], ...]
     feature_signals: dict[str, float]
+    score_contributions: dict[str, dict[str, float]]
     features: dict
     def to_dict(self) -> dict:
-        data = asdict(self); data['path'] = str(self.path); return data
+        data = asdict(self)
+        data['path'] = str(self.path)
+        data['features']['path'] = str(data['features']['path'])
+        return data
 
 def explain_image(path: str | Path) -> Explanation:
     image = Path(path); features = extract_features(image); diagnostic = diagnose(features); scores = score_vibes(features); selected = select_vibes(scores)
@@ -29,4 +33,15 @@ def explain_image(path: str | Path) -> Explanation:
         'light_ratio': round(features.light_ratio, 4), 'grayscale_ratio': round(features.grayscale_ratio, 4), 'text_likelihood': round(features.text_likelihood, 4),
         'center_brightness_delta': round(features.center_brightness_delta, 4), 'center_saturation_delta': round(features.center_saturation_delta, 4),
     }
-    return Explanation(image, diagnostic.winner.name, diagnostic.confidence, diagnostic.margin, diagnostic.ambiguous, tuple((s.name, s.score) for s in selected), tuple((s.name, s.score) for s in scores), signals, asdict(features))
+    return Explanation(
+        image,
+        diagnostic.winner.name,
+        diagnostic.confidence,
+        diagnostic.margin,
+        diagnostic.ambiguous,
+        tuple((s.name, s.score) for s in selected),
+        tuple((s.name, s.score) for s in scores),
+        signals,
+        score_vibe_contributions(features),
+        asdict(features),
+    )
