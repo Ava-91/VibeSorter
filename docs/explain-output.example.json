@@ -12,5 +12,46 @@
     "contrast": 0.74,
     "dark_ratio": 0.81,
     "center_brightness_delta": -0.11
+  },
+  "score_contributions": {
+    "Dark / Moody": {
+      "dark_ratio": 0.3402,
+      "contrast": 0.1702,
+      "saturation": 0.087,
+      "low_brightness": 0.078,
+      "center_darkness": 0.0616
+    },
+    "Retro Blue": {
+      "cool_ratio": 0.12,
+      "regional_cool": 0.08,
+      "low_saturation": 0.0672,
+      "blue_shift": 0.054,
+      "regional_saturation": 0.028,
+      "mid_brightness": 0.0352,
+      "center_darkness": 0.0924
+    },
+    "Soft / Pastel": {
+      "low_saturation": 0.084,
+      "light_ratio": 0.032,
+      "low_contrast": 0.026,
+      "brightness": 0.0528,
+      "center_brightness": 0.039,
+      "low_dark_ratio": 0.0266,
+      "darkness_penalty": -0.28
+    }
+  },
+  "features": {
+    "path": "photos/example.jpg",
+    "brightness": 0.22,
+    "saturation": 0.58,
+    "contrast": 0.74,
+    "dark_ratio": 0.81,
+    "light_ratio": 0.05,
+    "warm_ratio": 0.12,
+    "cool_ratio": 0.45,
+    "grayscale_ratio": 0.28,
+    "text_likelihood": 0.1,
+    "center_brightness_delta": -0.11,
+    "center_saturation_delta": 0.04
   }
 }
