@@ -25,11 +25,15 @@ def _score_components(features: ImageFeatures) -> dict[str, dict[str, float]]:
     brightness, saturation, contrast = features.brightness, features.saturation, features.contrast
     gray, dark, light = features.grayscale_ratio, features.dark_ratio, features.light_ratio
     center_delta = features.center_brightness_delta
+    regional_cool = max((region.cool_ratio for region in features.regions), default=features.cool_ratio)
+    regional_saturation = max((region.saturation for region in features.regions), default=saturation)
     return {
         "Retro Blue": {
-            "cool_ratio": 0.34 * features.cool_ratio,
-            "low_saturation": 0.20 * (1 - saturation),
+            "cool_ratio": 0.30 * features.cool_ratio,
+            "regional_cool": 0.08 * regional_cool,
+            "low_saturation": 0.16 * (1 - saturation),
             "blue_shift": 0.18 * _clamp((b-r+0.25)/0.65),
+            "regional_saturation": 0.04 * regional_saturation,
             "mid_brightness": 0.16 * _clamp(1-abs(brightness-0.52)/0.52),
             "center_darkness": 0.12 * _clamp(-center_delta+0.5),
         },
@@ -54,11 +58,12 @@ def _score_components(features: ImageFeatures) -> dict[str, dict[str, float]]:
             "center_separation": 0.08 * _clamp(abs(center_delta)+0.25),
         },
         "Soft / Pastel": {
-            "low_saturation": 0.30 * (1-saturation),
-            "light_ratio": 0.28 * light,
-            "low_contrast": 0.18 * _clamp(1-contrast),
-            "brightness": 0.14 * brightness,
+            "low_saturation": 0.20 * (1-saturation),
+            "light_ratio": 0.32 * light,
+            "low_contrast": 0.10 * _clamp(1-contrast),
+            "brightness": 0.24 * brightness,
             "center_brightness": 0.10 * _clamp(center_delta+0.5),
+            "low_dark_ratio": 0.14 * _clamp(1-dark),
         },
         "Dark / Moody": {
             "dark_ratio": 0.42 * dark,
@@ -82,15 +87,24 @@ def score_vibe_contributions(features: ImageFeatures) -> dict[str, dict[str, flo
     The contribution values sum to the corresponding raw vibe score. This
     mirrors ``score_vibes`` without changing its classification behavior.
     """
-    return {
+    contributions = {
         name: {feature: round(value, 4) for feature, value in components.items()}
         for name, components in _score_components(features).items()
     }
+    dark = features.dark_ratio
+    penalty = 0.28 * _clamp((dark - 0.22) / 0.45)
+    if penalty:
+        contributions["Soft / Pastel"]["darkness_penalty"] = round(-penalty, 4)
+    return contributions
 
 def score_vibes(features: ImageFeatures) -> tuple[VibeScore, ...]:
     """Score overlapping atmospheric categories from global and spatial features."""
     components = _score_components(features)
     scores = {name: _clamp(sum(values.values())) for name, values in components.items()}
+    # Calibration: muted/low-contrast is not automatically pastel when the image is dark-heavy.
+    pastel_darkness = _clamp((dark - 0.22) / 0.45)
+    if pastel_darkness:
+        scores["Soft / Pastel"] = _clamp(scores["Soft / Pastel"] - 0.28 * pastel_darkness)
     return tuple(sorted((VibeScore(name, round(score, 4)) for name, score in scores.items()), key=lambda result: result.score, reverse=True))
 
 def select_vibes(scores: tuple[VibeScore, ...], *, threshold: float = DEFAULT_VIBE_THRESHOLD, margin: float = DEFAULT_VIBE_MARGIN) -> tuple[VibeScore, ...]:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from vibesorter.features import extract_features
+from vibesorter.features import ImageFeatures, extract_features
 from vibesorter.vibes import VibeScore, classify, confidence_score, is_confident, score_vibes
 
 
@@ -76,3 +76,39 @@ def test_clear_winner_can_be_sorted_automatically() -> None:
     )
 
     assert is_confident(scores)
+
+
+def _feature_snapshot(*, brightness: float, saturation: float, contrast: float, dark: float, light: float, cool: float, regions=()):
+    return ImageFeatures(
+        path=Path("fixture.png"), average_rgb=(84, 101, 90),
+        average_hsv=(0.35, saturation, brightness), brightness=brightness,
+        saturation=saturation, contrast=contrast, warm_ratio=0.15,
+        cool_ratio=cool, grayscale_ratio=0.18, dark_ratio=dark,
+        light_ratio=light, text_likelihood=0.3, colors=(), regions=regions,
+        center_brightness_delta=0.18, center_saturation_delta=-0.06,
+    )
+
+
+def test_dark_muted_fixture_is_not_promoted_to_soft_pastel() -> None:
+    features = _feature_snapshot(
+        brightness=0.4079, saturation=0.2811, contrast=0.1977,
+        dark=0.3532, light=0.0174, cool=0.2122,
+    )
+    scores = dict((score.name, score.score) for score in score_vibes(features))
+    assert scores["Soft / Pastel"] < 0.45
+
+
+def test_regional_cool_signal_can_support_retro_blue() -> None:
+    from vibesorter.features import SpatialRegion
+    features = _feature_snapshot(
+        brightness=0.45, saturation=0.40, contrast=0.40,
+        dark=0.40, light=0.30, cool=0.20,
+        regions=(
+            SpatialRegion(0.30, 0.26, 0.03, 0.08),
+            SpatialRegion(0.31, 0.29, 0.32, 0.00),
+            SpatialRegion(0.47, 0.34, 0.11, 0.66),
+            SpatialRegion(0.55, 0.23, 0.15, 0.20),
+        ),
+    )
+    scores = score_vibes(features)
+    assert scores[0].name == "Retro Blue"
