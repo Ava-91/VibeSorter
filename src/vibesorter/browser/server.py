@@ -4,6 +4,7 @@ import argparse
 import json
 import mimetypes
 import sqlite3
+from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -84,6 +85,50 @@ def _query_rows(
         return rows, total
 
 
+def _vibe_summary(db_path: Path) -> list[dict]:
+    if not db_path.exists():
+        return []
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        table, columns = _table_info(conn)
+        if not table or not columns.get("path"):
+            return []
+        counts: dict[str, int] = defaultdict(int)
+        confidence_totals: dict[str, float] = defaultdict(float)
+        confidence_counts: dict[str, int] = defaultdict(int)
+        if columns.get("vibe"):
+            select = columns["vibe"]
+            confidence_col = columns.get("confidence")
+            rows = conn.execute(f"SELECT {select}, {confidence_col or 'NULL'} FROM {table}")
+            for vibe, confidence in rows:
+                label = str(vibe or "Unclassified")
+                counts[label] += 1
+                if isinstance(confidence, (int, float)):
+                    confidence_totals[label] += float(confidence)
+                    confidence_counts[label] += 1
+        elif columns.get("scores"):
+            for (scores,) in conn.execute(f"SELECT {columns['scores']} FROM {table}"):
+                try:
+                    parsed = json.loads(scores)
+                    if not parsed:
+                        continue
+                    label = str(parsed[0]["name"])
+                    parsed_scores = tuple(VibeScore(str(item["name"]), float(item["score"])) for item in parsed)
+                    counts[label] += 1
+                    confidence_totals[label] += confidence_score(parsed_scores)
+                    confidence_counts[label] += 1
+                except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+                    counts["Unclassified"] += 1
+        return [
+            {
+                "vibe": label,
+                "count": counts[label],
+                "average_confidence": round(confidence_totals[label] / confidence_counts[label], 4) if confidence_counts[label] else None,
+            }
+            for label in sorted(counts, key=lambda item: (-counts[item], item.casefold()))
+        ]
+
+
 def _rows(db_path: Path, vibe: str | None, query: str | None, limit: int = DEFAULT_LIMIT) -> list[dict]:
     rows, _ = _query_rows(db_path, vibe, query, limit=limit)
     return rows
@@ -128,6 +173,9 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db"):
             params = parse_qs(parsed.query)
             vibe = params.get("vibe", [None])[0]
             query = params.get("q", [None])[0]
+            if parsed.path == "/api/vibes":
+                self._send(200, json.dumps({"items": _vibe_summary(db)}, ensure_ascii=False), "application/json; charset=utf-8")
+                return
             try:
                 limit = int(params.get("limit", [DEFAULT_LIMIT])[0])
                 page = max(1, int(params.get("page", [1])[0]))
