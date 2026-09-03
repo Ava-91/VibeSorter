@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from http.server import ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import quote
 from urllib.request import urlopen
 
 from PIL import Image
 
 from vibesorter.browser.server import create_app
-from http.server import ThreadingHTTPServer
 
 
 def test_browser_end_to_end_with_real_local_images(tmp_path: Path):
@@ -46,13 +47,13 @@ def test_browser_end_to_end_with_real_local_images(tmp_path: Path):
         assert len(payload["items"]) == 2
         assert payload["items"][0]["path"] == str(images[0])
 
-        with urlopen(f"{base}/api/image?path={images[0]}", timeout=3) as response:
+        with urlopen(f"{base}/api/image?path={quote(str(images[0]))}", timeout=3) as response:
             body = response.read()
             content_type = response.headers["Content-Type"]
         assert body == images[0].read_bytes()
         assert content_type.startswith("image/png")
 
-        with urlopen(f"{base}/api/image-details?path={images[1]}", timeout=3) as response:
+        with urlopen(f"{base}/api/image-details?path={quote(str(images[1]))}", timeout=3) as response:
             detail = json.load(response)
         assert detail["path"] == str(images[1])
         assert detail["vibe"] == "Red / Warm"
