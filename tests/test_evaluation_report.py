@@ -7,10 +7,12 @@ from PIL import Image
 
 from vibesorter.evaluation import (
     LabelledImage,
+    evaluate_classifier,
     evaluate_dataset,
     expected_calibration_error,
     load_labels,
 )
+from vibesorter.vibes import VibeScore
 
 
 def test_evaluation_report_includes_f1_and_ambiguity(tmp_path: Path) -> None:
@@ -38,6 +40,27 @@ def test_zero_support_vibe_metrics_are_zero(tmp_path: Path) -> None:
     assert metrics["precision"] == 0.0
     assert metrics["recall"] == 0.0
     assert metrics["f1"] == 0.0
+
+
+def test_precision_recall_and_f1_are_reported() -> None:
+    labels = (
+        LabelledImage(Path("a"), "Red / Warm"),
+        LabelledImage(Path("b"), "Red / Warm"),
+        LabelledImage(Path("c"), "Green & Black"),
+    )
+
+    class FakeClassifier:
+        def predict(self, path: Path) -> VibeScore:
+            return VibeScore("Green & Black" if path.name == "c" else "Red / Warm", 0.9)
+
+    metrics = evaluate_classifier(labels, FakeClassifier())
+    red = metrics.per_vibe["Red / Warm"]
+
+    assert red["support"] == 2
+    assert red["precision"] == 1.0
+    assert red["recall"] == 1.0
+    assert red["f1"] == 1.0
+    assert metrics.confusion_matrix["Green & Black"]["Green & Black"] == 1
 
 
 def test_expected_calibration_error_is_zero_for_empty_data() -> None:
