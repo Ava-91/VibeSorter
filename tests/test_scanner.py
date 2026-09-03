@@ -15,10 +15,11 @@ class ScannerTests(unittest.TestCase):
             (nested / "two.png").touch()
             (nested / "notes.txt").touch()
 
-            self.assertEqual(
-                find_images(root),
+            expected = sorted(
                 [root / "one.JPG", nested / "two.png"],
+                key=lambda path: str(path).casefold(),
             )
+            self.assertEqual(find_images(root), expected)
 
     def test_find_images_can_disable_recursion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
