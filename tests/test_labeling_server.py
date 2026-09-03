@@ -3,9 +3,27 @@ import threading
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 
+from vibesorter.browser.labeling_ui import render_label_page
 from vibesorter.browser.server import create_app
 from vibesorter.labeling import LabelCandidate, LabelSession
 from vibesorter.vibes import VibeScore
+
+
+def test_label_page_renders_without_python_fstring_syntax_errors(tmp_path):
+    image = tmp_path / "image.jpg"
+    candidate = LabelCandidate(
+        image.resolve(),
+        "Retro Blue",
+        0.43,
+        True,
+        (VibeScore("Retro Blue", 0.48), VibeScore("Soft / Pastel", 0.40)),
+    )
+    page = render_label_page(LabelSession((candidate,), tmp_path / "labels.jsonl"))
+    assert "Assisted labeling" in page
+    assert "Retro Blue" in page
+    assert "__PAYLOAD__" not in page
+    assert "__VIBE_BUTTONS__" not in page
+    assert "function decide(label,skip=false)" in page
 
 
 def test_label_decision_endpoint_persists_human_label(tmp_path):
