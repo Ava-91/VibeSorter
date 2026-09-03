@@ -21,18 +21,30 @@ summary/navigation       │
         │                 │
 /api/images?page=N&limit=48
         ↓
-small result page
-        ↓
 thumbnail grid
         ↓
 /api/image?path=...
+        │
+        └── /api/image-details?path=...
 ```
 
 The browser reads the existing SQLite analysis index. Switching pages, vibes, or text filters does not rescan or re-analyze the image library.
 
 ## Vibe navigation
 
-The sidebar lists primary vibes with result counts. Selecting a vibe changes the current image query and keeps pagination bounded. Average confidence is available from the summary API for future summary views.
+The sidebar lists primary vibes with result counts. Selecting a vibe changes the current image query and keeps pagination bounded. Average confidence is available from the summary API.
+
+## Image details
+
+Click or focus an image card to open its local detail view. The detail view reads cached data and shows:
+
+- primary vibe and confidence
+- ambiguity status using the classifier's existing confidence rules
+- ranked vibe scores, including secondary candidates
+- selected lightweight feature signals
+- local file existence and size
+
+No classifier run is triggered when opening details.
 
 ## Pagination and loading
 
