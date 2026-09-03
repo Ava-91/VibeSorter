@@ -75,8 +75,11 @@ def _query_rows(
         if vibe and vibe_col:
             where.append(f"{vibe_col} = ?")
             args.append(vibe)
+        elif vibe and columns.get("scores"):
+            where.append(f"{columns['scores']} LIKE ?")
+            args.append(f"%\"name\": {json.dumps(vibe, ensure_ascii=False)}%")
         if query:
-            where.append(f"{path_col} LIKE ?")
+            where.append(f"LOWER({path_col}) LIKE LOWER(?)")
             args.append(f"%{query}%")
         clause = (" WHERE " + " AND ".join(where)) if where else ""
         total = conn.execute(f"SELECT COUNT(*) FROM {table}{clause}", args).fetchone()[0]
@@ -111,6 +114,7 @@ def _vibe_summary(db_path: Path) -> list[dict]:
                 try:
                     parsed = json.loads(scores)
                     if not parsed:
+                        counts["Unclassified"] += 1
                         continue
                     label = str(parsed[0]["name"])
                     parsed_scores = tuple(VibeScore(str(item["name"]), float(item["score"])) for item in parsed)
