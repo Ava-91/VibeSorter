@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from .features import ImageFeatures
 
-VIBES = ("Retro Blue", "Red / Warm", "Green & Black", "Black & White", "Soft / Pastel", "Dark / Moody", "Bright / Colorful")
+VIBES = ("Retro Blue", "Red / Warm", "Green & Black", "Black & White", "Soft / Pastel", "Dark / Moody", "Bright / Colorful", "Neutral / Photo Dump")
 MIN_CONFIDENT_SCORE = 0.60
 MIN_CONFIDENT_MARGIN = 0.08
 CONFIDENCE_MARGIN_SCALE = 0.25
@@ -27,7 +27,7 @@ def _score_components(features: ImageFeatures) -> dict[str, dict[str, float]]:
     center_delta = features.center_brightness_delta
     regional_cool = max((region.cool_ratio for region in features.regions), default=features.cool_ratio)
     regional_saturation = max((region.saturation for region in features.regions), default=saturation)
-    return {
+    components = {
         "Retro Blue": {
             "cool_ratio": 0.30 * features.cool_ratio,
             "regional_cool": 0.08 * regional_cool,
@@ -80,6 +80,16 @@ def _score_components(features: ImageFeatures) -> dict[str, dict[str, float]]:
             "center_brightness": 0.08 * _clamp(center_delta+0.5),
         },
     }
+    components["Soft / Pastel"]["darkness_penalty"] = -_pastel_darkness_penalty(features)
+
+    existing_scores = {
+        name: _clamp(sum(values.values())) for name, values in components.items()
+    }
+    strongest_aesthetic = max(existing_scores.values(), default=0.0)
+    components["Neutral / Photo Dump"] = {
+        "absence_of_strong_aesthetic": _clamp(1.0 - strongest_aesthetic),
+    }
+    return components
 
 def _pastel_darkness_penalty(features: ImageFeatures) -> float:
     """Penalize Soft / Pastel when an image is substantially dark-heavy."""
@@ -91,22 +101,15 @@ def score_vibe_contributions(features: ImageFeatures) -> dict[str, dict[str, flo
     The contribution values sum to the corresponding raw vibe score. This
     mirrors ``score_vibes`` without changing its classification behavior.
     """
-    contributions = {
+    return {
         name: {feature: round(value, 4) for feature, value in components.items()}
         for name, components in _score_components(features).items()
     }
-    penalty = _pastel_darkness_penalty(features)
-    if penalty:
-        contributions["Soft / Pastel"]["darkness_penalty"] = round(-penalty, 4)
-    return contributions
 
 def score_vibes(features: ImageFeatures) -> tuple[VibeScore, ...]:
     """Score overlapping atmospheric categories from global and spatial features."""
     components = _score_components(features)
     scores = {name: _clamp(sum(values.values())) for name, values in components.items()}
-    pastel_darkness = _pastel_darkness_penalty(features)
-    if pastel_darkness:
-        scores["Soft / Pastel"] = _clamp(scores["Soft / Pastel"] - pastel_darkness)
     return tuple(sorted((VibeScore(name, round(score, 4)) for name, score in scores.items()), key=lambda result: result.score, reverse=True))
 
 def select_vibes(scores: tuple[VibeScore, ...], *, threshold: float = DEFAULT_VIBE_THRESHOLD, margin: float = DEFAULT_VIBE_MARGIN) -> tuple[VibeScore, ...]:

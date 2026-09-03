@@ -18,7 +18,7 @@ The detector uses lightweight local image features including brightness, saturat
 
 Repeated library analysis persists results in a local SQLite `.vibesorter/analysis.db` index. Each entry records the source file size and nanosecond modification time. If either changes, the image is analyzed again. Existing `.vibesorter/analysis.json` caches are imported automatically during migration.
 
-A classification keeps the full ranked vibe scores. The strongest vibe remains the primary result for compatibility, while close secondary vibes can be selected when an image genuinely overlaps multiple aesthetics.
+A classification keeps the full ranked vibe scores. The strongest vibe remains the primary result for compatibility, while close secondary vibes can be selected when an image genuinely overlaps multiple aesthetics. `Neutral / Photo Dump` is the eighth class for ordinary images without a clearly dominant visual aesthetic; it prevents low-signal camera-roll images from being forced into an aesthetic such as Soft / Pastel.
 
 Classifier quality can be evaluated against a local human-labelled JSONL dataset. Vibe accuracy, per-vibe precision/recall, confusion matrices, raw confidence observations, and empirical calibration bins are available through the Python API. An offline nearest-centroid learned classifier is also available for comparison with the deterministic heuristic baseline.
 
@@ -79,7 +79,7 @@ This keeps exploration fast while preserving the local-first design.
 
 #### 🧠 Vibe intelligence
 
-VibeSorter now retains overlapping vibe scores instead of pretending every image has one perfectly isolated aesthetic. Lightweight spatial features add regional context without introducing a heavyweight vision model. Classifier calibration also distinguishes genuinely light pastel imagery from dark, muted images by applying an explainable darkness penalty to Soft / Pastel scoring.
+VibeSorter now retains overlapping vibe scores instead of pretending every image has one perfectly isolated aesthetic. Lightweight spatial features add regional context without introducing a heavyweight vision model. Classifier calibration also distinguishes genuinely light pastel imagery from dark, muted images by applying an explainable darkness penalty to Soft / Pastel scoring. Neutral / Photo Dump provides an explicit fallback for ordinary, low-aesthetic-signal photos instead of treating them as pastel by default.
 
 The project also includes an offline nearest-centroid learned classifier and an evaluation API so data-driven classifier quality can be compared against the deterministic baseline.
 

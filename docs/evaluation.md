@@ -26,7 +26,7 @@ For each image, VibeSorter shows:
 Then make one quick decision:
 
 - **Enter:** accept VibeSorter's prediction
-- **1–7:** correct it to a specific vibe
+- **1–8:** correct it to a specific vibe
 - **S:** skip it for later
 - **U:** undo the last decision
 
@@ -42,7 +42,7 @@ The output records the human decision separately from the classifier proposal, f
 
 The `label` field is the ground-truth decision used by evaluation. The `prediction` and `confidence` fields are audit information and do not become ground truth automatically.
 
-The label must be one of:
+The supported labels are:
 
 - `Retro Blue`
 - `Red / Warm`
@@ -51,6 +51,15 @@ The label must be one of:
 - `Soft / Pastel`
 - `Dark / Moody`
 - `Bright / Colorful`
+- `Neutral / Photo Dump`
+
+### How to label Neutral / Photo Dump
+
+Use `Neutral / Photo Dump` when the image is an ordinary photo with **no clearly dominant visual aesthetic**. Typical examples include a normal camera-roll shot, casual selfie, candid, ordinary street photo, or miscellaneous photo where the lighting and color treatment do not intentionally read as one of the other vibes.
+
+Do **not** use Neutral just because an image is not dark, colorful, or highly saturated. Likewise, do not use Soft / Pastel merely because an image has low saturation or low contrast. Soft / Pastel should visibly feel pale, airy, delicate, or intentionally pastel.
+
+A useful human-labeling question is: **“Does this image have a noticeable aesthetic signal, or is it basically just a normal/photo-dump picture?”** If there is no strong signal, choose Neutral.
 
 Do not commit private images or a private library's labels file to the repository.
 

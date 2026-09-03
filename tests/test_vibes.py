@@ -42,11 +42,11 @@ def test_vibe_scores_are_sorted_and_complete(tmp_path: Path) -> None:
     features = extract_features(image)
     scores = score_vibes(features)
 
-    assert len(scores) == 7
+    assert len(scores) == 8
     assert scores[0].score >= scores[-1].score
     assert {result.name for result in scores} == {
         "Retro Blue", "Red / Warm", "Green & Black", "Black & White",
-        "Soft / Pastel", "Dark / Moody", "Bright / Colorful",
+        "Soft / Pastel", "Dark / Moody", "Bright / Colorful", "Neutral / Photo Dump",
     }
     assert classify(features) == scores[0]
     assert scores[0].name == "Red / Warm"
@@ -78,9 +78,9 @@ def test_clear_winner_can_be_sorted_automatically() -> None:
     assert is_confident(scores)
 
 
-def _feature_snapshot(*, brightness: float, saturation: float, contrast: float, dark: float, light: float, cool: float, regions=()):
+def _feature_snapshot(*, brightness: float, saturation: float, contrast: float, dark: float, light: float, cool: float, rgb=(84, 101, 90), regions=()):
     return ImageFeatures(
-        path=Path("fixture.png"), average_rgb=(84, 101, 90),
+        path=Path("fixture.png"), average_rgb=rgb,
         average_hsv=(0.35, saturation, brightness), brightness=brightness,
         saturation=saturation, contrast=contrast, warm_ratio=0.15,
         cool_ratio=cool, grayscale_ratio=0.18, dark_ratio=dark,
@@ -122,3 +122,26 @@ def test_pastel_darkness_penalty_is_explainable() -> None:
     contributions = score_vibe_contributions(features)["Soft / Pastel"]
     assert contributions["darkness_penalty"] < 0
     assert sum(contributions.values()) < 0.45
+
+
+def test_neutral_photo_dump_is_an_eighth_score_with_explainable_contribution() -> None:
+    features = _feature_snapshot(
+        brightness=0.40, saturation=0.45, contrast=0.70,
+        dark=0.35, light=0.35, cool=0.10,
+    )
+    scores = score_vibes(features)
+    contributions = score_vibe_contributions(features)
+
+    assert scores[0].name == "Neutral / Photo Dump"
+    assert contributions["Neutral / Photo Dump"]["absence_of_strong_aesthetic"] == scores[0].score
+    assert sum(contributions["Neutral / Photo Dump"].values()) == scores[0].score
+
+
+def test_strong_aesthetic_does_not_get_relabelled_as_neutral() -> None:
+    features = _feature_snapshot(
+        brightness=0.35, saturation=0.65, contrast=0.45,
+        dark=0.65, light=0.15, cool=0.05,
+        rgb=(20, 110, 20),
+    )
+    scores = dict((score.name, score.score) for score in score_vibes(features))
+    assert scores["Green & Black"] > scores["Neutral / Photo Dump"]

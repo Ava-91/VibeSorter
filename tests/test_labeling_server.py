@@ -21,9 +21,12 @@ def test_label_page_renders_without_python_fstring_syntax_errors(tmp_path):
     page = render_label_page(LabelSession((candidate,), tmp_path / "labels.jsonl"))
     assert "Assisted labeling" in page
     assert "Retro Blue" in page
+    assert "Neutral / Photo Dump" in page
     assert "__PAYLOAD__" not in page
     assert "__VIBE_BUTTONS__" not in page
     assert "function decide(label,skip=false)" in page
+    assert "1–8" in page
+    assert '"8": "Neutral / Photo Dump"' in page
 
 
 def test_label_decision_endpoint_persists_human_label(tmp_path):

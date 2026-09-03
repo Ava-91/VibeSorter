@@ -13,6 +13,7 @@ def render_label_page(session: LabelSession) -> str:
         f"<button class='vibe' data-label='{html.escape(vibe, quote=True)}'><kbd>{index + 1}</kbd> {html.escape(vibe)}</button>"
         for index, vibe in enumerate(vibes)
     )
+    key_map = json.dumps({str(index + 1): vibe for index, vibe in enumerate(vibes)}, ensure_ascii=False)
     candidates = [item.to_dict() for item in session.remaining]
     payload = json.dumps(candidates, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
@@ -35,14 +36,20 @@ def render_label_page(session: LabelSession) -> str:
 <script>
 const candidates=JSON.parse(document.getElementById('candidate-data').textContent);let index=0;let busy=false;
 const app=document.getElementById('app'),counter=document.getElementById('counter');
+const keyMap=__KEY_MAP__;
 function esc(value){return String(value).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));}
 function render(){if(index>=candidates.length){app.innerHTML=`<section class='panel done'><h2>🎉 Review complete</h2><p>All selected images have a human label.</p><p>You can now run <code>vibesorter evaluate</code> on the output file.</p></section>`;counter.textContent=`${candidates.length} / ${candidates.length}`;return;}
 const item=candidates[index];counter.textContent=`${index+1} / ${candidates.length} · ${item.ambiguous?'ambiguous':'confident'}`;const scores=(item.scores||[]).slice(0,5).map(s=>`<div class='score'><span>${esc(s.name)}</span><strong>${Math.round(Number(s.score)*100)}%</strong></div>`).join('');
-app.innerHTML=`<section class='panel'><div class='image-wrap'><img id='image' src='/api/image?path=${encodeURIComponent(item.path)}' alt='${esc(item.prediction)}' onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'missing',textContent:'Image is no longer available'}))"></div></section><section class='panel'><p>VibeSorter thinks:</p><div class='prediction'>${esc(item.prediction)}</div><div class='confidence'>${Math.round(Number(item.confidence)*100)}% confidence</div><div class='scores'>${scores}</div><div class='actions'><button id='accept'><kbd>Enter</kbd> Accept <strong>${esc(item.prediction)}</strong></button>__VIBE_BUTTONS__<button id='skip'><kbd>S</kbd> Skip for later</button></div><div class='secondary'><button id='undo'><kbd>U</kbd> Undo last decision</button></div><div id='status'></div><div class='help'>Keys: <kbd>Enter</kbd> accept · <kbd>1–7</kbd> correct · <kbd>S</kbd> skip · <kbd>U</kbd> undo. Decisions are saved immediately.</div></section>`;
+app.innerHTML=`<section class='panel'><div class='image-wrap'><img id='image' src='/api/image?path=${encodeURIComponent(item.path)}' alt='${esc(item.prediction)}' onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'missing',textContent:'Image is no longer available'}))"></div></section><section class='panel'><p>VibeSorter thinks:</p><div class='prediction'>${esc(item.prediction)}</div><div class='confidence'>${Math.round(Number(item.confidence)*100)}% confidence</div><div class='scores'>${scores}</div><div class='actions'><button id='accept'><kbd>Enter</kbd> Accept <strong>${esc(item.prediction)}</strong></button>__VIBE_BUTTONS__<button id='skip'><kbd>S</kbd> Skip for later</button></div><div class='secondary'><button id='undo'><kbd>U</kbd> Undo last decision</button></div><div id='status'></div><div class='help'>Keys: <kbd>Enter</kbd> accept · <kbd>1–8</kbd> correct · <kbd>S</kbd> skip · <kbd>U</kbd> undo. Decisions are saved immediately.</div></section>`;
 }
 async function decide(label,skip=false){if(busy||index>=candidates.length)return;busy=true;const status=document.getElementById('status');status.textContent='Saving…';try{const response=await fetch('/api/label/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:candidates[index].path,label:label||null,skip})});const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);index++;render();}catch(error){status.textContent=error.message;}finally{busy=false;}}
-function accept(){decide(candidates[index]?.prediction);}document.addEventListener('keydown',event=>{if(event.target instanceof HTMLInputElement||event.target instanceof HTMLTextAreaElement)return;if(event.key==='Enter'){event.preventDefault();accept();return;}if(event.key.toLowerCase()==='s'){event.preventDefault();decide(null,true);return;}if(event.key.toLowerCase()==='u'){event.preventDefault();undo();return;}const number=Number(event.key);if(number>=1&&number<=7){event.preventDefault();decide({1:'Retro Blue',2:'Red / Warm',3:'Green & Black',4:'Black & White',5:'Soft / Pastel',6:'Dark / Moody',7:'Bright / Colorful'}[number]);}});
+function accept(){decide(candidates[index]?.prediction);}document.addEventListener('keydown',event=>{if(event.target instanceof HTMLInputElement||event.target instanceof HTMLTextAreaElement)return;if(event.key==='Enter'){event.preventDefault();accept();return;}if(event.key.toLowerCase()==='s'){event.preventDefault();decide(null,true);return;}if(event.key.toLowerCase()==='u'){event.preventDefault();undo();return;}const label=keyMap[event.key];if(label){event.preventDefault();decide(label);}});
 async function undo(){if(busy)return;const status=document.getElementById('status');try{const response=await fetch('/api/label/undo',{method:'POST'});const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);if(data.undone&&index>0)index--;render();}catch(error){status.textContent=error.message;}}
 app.addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.id==='accept')accept();else if(button.id==='skip')decide(null,true);else if(button.id==='undo')undo();else if(button.dataset.label)decide(button.dataset.label);});render();
 </script></body></html>"""
-    return page.replace("__PAYLOAD__", payload).replace("__VIBE_BUTTONS__", vibe_buttons)
+    return (
+        page
+        .replace("__PAYLOAD__", payload)
+        .replace("__KEY_MAP__", key_map)
+        .replace("__VIBE_BUTTONS__", vibe_buttons)
+    )
