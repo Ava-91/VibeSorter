@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from ..vibes import VibeScore, confidence_score, is_confident
 from .ui import render_page
+from .labeling_ui import render_label_page
 
 DEFAULT_LIMIT = 48
 MAX_LIMIT = 120
@@ -178,7 +179,7 @@ def _image_path(db_path: Path, requested: str) -> Path | None:
     return path if path.is_file() else None
 
 
-def create_app(db_path: str | Path = ".vibesorter/analysis.db"):
+def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=None):
     db = Path(db_path)
 
     class Handler(BaseHTTPRequestHandler):
@@ -186,8 +187,14 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db"):
             body = content.encode(); self.send_response(status); self.send_header("Content-Type", content_type); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
         def _send_bytes(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status); self.send_header("Content-Type", content_type); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+        def _json(self, status: int, payload: dict) -> None:
+            self._send(status, json.dumps(payload, ensure_ascii=False), "application/json; charset=utf-8")
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path); params = parse_qs(parsed.query); vibe = params.get("vibe", [None])[0]; query = params.get("q", [None])[0]
+            if parsed.path == "/label":
+                if label_session is None: self._send(404, "Labeling session not configured", "text/plain; charset=utf-8")
+                else: self._send(200, render_label_page(label_session))
+                return
             if parsed.path == "/api/vibes":
                 self._send(200, json.dumps({"items": _vibe_summary(db)}, ensure_ascii=False), "application/json; charset=utf-8"); return
             if parsed.path == "/api/image-details":
@@ -211,12 +218,36 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db"):
                 return
             if parsed.path != "/": self._send(404, "Not found", "text/plain; charset=utf-8"); return
             self._send(200, render_page())
+        def do_POST(self) -> None:  # noqa: N802
+            if label_session is None or urlparse(self.path).path not in {"/api/label/decision", "/api/label/undo"}:
+                self._json(404, {"error": "Labeling session not configured" if label_session is None else "Not found"}); return
+            if urlparse(self.path).path == "/api/label/undo":
+                self._json(200, {"undone": label_session.undo(), "labelled": label_session.labelled}); return
+            try:
+                length = int(self.headers.get("Content-Length", "0")); data = json.loads(self.rfile.read(length) or b"{}")
+                requested = str(data["path"]); label = data.get("label"); skip = bool(data.get("skip", False))
+                candidate = next((item for item in label_session.remaining if str(item.path.resolve()) == str(Path(requested).expanduser().resolve())), None)
+                if candidate is None: raise ValueError("unknown or already-labelled image")
+                if skip:
+                    label_session.decide(candidate, None)
+                else:
+                    label_session.decide(candidate, str(label))
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                self._json(400, {"error": str(exc)}); return
+            self._json(200, {"ok": True, "labelled": label_session.labelled, "remaining": len(label_session.remaining)})
         def log_message(self, *_args) -> None: return
     return Handler
 
 
-def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = ThreadingHTTPServer((host, port), create_app(db_path)); print(f"VibeSorter browser: http://{host}:{port}")
+def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127.0.0.1", port: int = 8765, label_session=None) -> None:
+    server = ThreadingHTTPServer((host, port), create_app(db_path, label_session=label_session)); print(f"VibeSorter browser: http://{host}:{port}")
+    try: server.serve_forever()
+    except KeyboardInterrupt: pass
+    finally: server.server_close()
+
+
+def run_label_server(label_session, *, db_path: str | Path, host: str = "127.0.0.1", port: int = 8765) -> None:
+    server = ThreadingHTTPServer((host, port), create_app(db_path, label_session=label_session)); print(f"VibeSorter labeling: http://{host}:{port}/label")
     try: server.serve_forever()
     except KeyboardInterrupt: pass
     finally: server.server_close()

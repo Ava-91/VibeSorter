@@ -2,27 +2,43 @@
 
 VibeSorter can evaluate its deterministic heuristic classifier against a human-labelled JSONL dataset without modifying or uploading source images.
 
-## 1. Create a representative label sample
+## 1. Prepare a representative assisted-labeling session
 
-For a real image library, use the built-in sampler to create a deterministic subset rather than manually collecting paths:
+For a real image library, let VibeSorter select difficult examples and show the actual images locally:
 
 ```bash
-vibesorter sample-labels "E:\\Ava files\\Pictures\\Billie Eilish" --count 150 --output labels.jsonl
+vibesorter label "E:\\Ava files\\Pictures\\Billie Eilish" --count 150 --output labels.jsonl
 ```
 
-The sampler discovers supported image files, selects evenly distributed paths from the sorted file list, and writes only paths plus blank labels. Re-running against an unchanged folder produces the same sample. It never copies or modifies source images.
+The command incrementally indexes the folder into its local SQLite cache, then starts a local browser at `http://127.0.0.1:8765/label`. No source images are copied or uploaded. If the cache already exists, unchanged images are reused instead of re-analyzed.
 
-Use `--no-recursive` if only the top-level folder should be considered. The output defaults to `labels.jsonl` when `--output` is omitted.
+By default, candidates are ordered with ambiguous and lower-confidence predictions first. Use `--all-order` when you want deterministic path order instead. Use `--db` to point at an existing analysis database, and `--host`/`--port` to change the local server address.
 
-Open `labels.jsonl` in a text editor and fill every empty `label` with the vibe that a human believes best describes that image. Do not evaluate the template while labels are blank: `vibesorter evaluate` requires valid vibe names.
+### Human-in-the-loop controls
 
-Include different lighting, color palettes, subjects, crops, and borderline cases. A representative sample is more useful than choosing only easy examples.
+For each image, VibeSorter shows:
 
-Each completed JSONL line has this shape:
+- the actual local image
+- its predicted vibe
+- confidence and ambiguity
+- the strongest competing vibe scores
+
+Then make one quick decision:
+
+- **Enter:** accept VibeSorter's prediction
+- **1–7:** correct it to a specific vibe
+- **S:** skip it for later
+- **U:** undo the last decision
+
+Every accepted/corrected decision is written immediately to the JSONL file, so closing the browser or stopping the server does not discard completed labels. Starting the same session again resumes from already-labelled paths. Skipped images remain unlabelled and can be reviewed later.
+
+The output records the human decision separately from the classifier proposal, for example:
 
 ```json
-{"path":"E:/Ava files/Pictures/Billie Eilish/example.jpg","label":"Retro Blue"}
+{"path":"E:/Ava files/Pictures/Billie Eilish/example.jpg","label":"Dark / Moody","source":"human","prediction":"Soft / Pastel","confidence":0.41}
 ```
+
+The `label` field is the ground-truth decision used by evaluation. The `prediction` and `confidence` fields are audit information and do not become ground truth automatically.
 
 The label must be one of:
 
@@ -35,6 +51,16 @@ The label must be one of:
 - `Bright / Colorful`
 
 Do not commit private images or a private library's labels file to the repository.
+
+### Legacy deterministic sampler
+
+`sample-labels` remains available when you specifically want a blank path-only template:
+
+```bash
+vibesorter sample-labels "E:\\Ava files\\Pictures\\Billie Eilish" --count 150 --output labels.jsonl
+```
+
+It discovers supported image files, selects evenly distributed paths from the sorted file list, and writes blank labels. It is intentionally manual; the `label` command is the recommended workflow for classifier evaluation.
 
 ## 2. Run the evaluation
 
