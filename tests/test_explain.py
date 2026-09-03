@@ -22,7 +22,8 @@ def test_explain_json_is_serializable_with_nested_feature_path(tmp_path):
     Image.new('RGB', (32, 32), (20, 30, 70)).save(path)
     data = explain_image(path).to_dict()
     encoded = json.dumps(data, ensure_ascii=False)
-    assert str(path) in encoded
+    decoded = json.loads(encoded)
+    assert decoded['features']['path'] == str(path)
     assert data['features']['path'] == str(path)
 
 
