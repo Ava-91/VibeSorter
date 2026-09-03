@@ -2,7 +2,7 @@ from pathlib import Path
 import json
 import sqlite3
 
-from vibesorter.browser.server import _image_path, _query_rows, _rows
+from vibesorter.browser.server import _image_path, _query_rows, _rows, _vibe_summary
 from vibesorter.browser.ui import render_page
 
 
@@ -56,6 +56,24 @@ def test_browser_paginates_cached_rows(tmp_path: Path):
     assert [row["path"] for row in second] == ["02.png", "03.png"]
 
 
+def test_browser_vibe_summary_uses_current_sqlite_scores(tmp_path: Path):
+    db = tmp_path / "analysis.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE images (path TEXT PRIMARY KEY, size INTEGER, mtime_ns INTEGER, features TEXT, scores TEXT)")
+        rows = [
+            ("a.png", 1, 1, "{}", json.dumps([{"name": "Dark / Moody", "score": 0.8}, {"name": "Retro Blue", "score": 0.5}])),
+            ("b.png", 1, 1, "{}", json.dumps([{ "name": "Dark / Moody", "score": 0.7}, {"name": "Retro Blue", "score": 0.4}])),
+            ("c.png", 1, 1, "{}", json.dumps([{ "name": "Soft / Pastel", "score": 0.7}, {"name": "Bright / Colorful", "score": 0.4}])),
+        ]
+        conn.executemany("INSERT INTO images VALUES (?, ?, ?, ?, ?)", rows)
+        conn.commit()
+    summary = _vibe_summary(db)
+    assert summary[0]["vibe"] == "Dark / Moody"
+    assert summary[0]["count"] == 2
+    assert summary[1]["vibe"] == "Soft / Pastel"
+    assert summary[1]["count"] == 1
+
+
 def test_browser_image_path_only_serves_cached_existing_files(tmp_path: Path):
     db = tmp_path / "analysis.db"
     image = tmp_path / "photo.png"
@@ -79,3 +97,4 @@ def test_browser_renders_lazy_image_grid():
     assert "loading='lazy'" in page
     assert "api/images" in page
     assert "load-more" in page
+    assert "api/vibes" in page
