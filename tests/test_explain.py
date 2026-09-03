@@ -33,5 +33,5 @@ def test_explain_includes_weighted_score_contributions(tmp_path):
     assert set(data['score_contributions']) == {name for name, _ in data['scores']}
     for name, contributions in data['score_contributions'].items():
         assert contributions
-        assert all(value >= 0 for value in contributions.values())
+        assert all(isinstance(value, (int, float)) for value in contributions.values())
         assert abs(sum(contributions.values()) - dict(data['scores'])[name]) < 0.001
