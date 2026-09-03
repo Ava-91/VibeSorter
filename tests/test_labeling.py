@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from vibesorter.browser.labeling_ui import render_label_page
+from vibesorter.label_sampling import write_label_template
 from vibesorter.labeling import LabelCandidate, LabelSession, build_candidates, load_completed_labels, save_label
 from vibesorter.vibes import VibeScore
 
@@ -32,20 +33,17 @@ def test_build_candidates_prioritizes_ambiguous_then_confidence(tmp_path):
 
 def test_label_session_accepts_sample_labels_template(tmp_path):
     output = tmp_path / "labels.jsonl"
-    output.write_text(
-        json.dumps({"path": str((tmp_path / "a.jpg").resolve()), "label": ""}) + "\n"
-        + json.dumps({"path": str((tmp_path / "b.jpg").resolve()), "label": "Retro Blue"}) + "\n",
-        encoding="utf-8",
-    )
-    first = _candidate(tmp_path / "a.jpg")
-    second = _candidate(tmp_path / "b.jpg", "Dark / Moody", 0.31)
+    paths = [tmp_path / "a.jpg", tmp_path / "b.jpg"]
+    write_label_template(paths, output)
+    first = _candidate(paths[0])
+    second = _candidate(paths[1], "Dark / Moody", 0.31)
     session = LabelSession((first, second), output)
-    assert session.labelled == 1
-    assert session.remaining == (first,)
+    assert session.labelled == 0
+    assert session.remaining == (first, second)
     session.decide(first, first.prediction)
     records = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
-    assert {record["label"] for record in records} == {"Retro Blue"}
-    assert len(records) == 2
+    assert len(records) == 1
+    assert records[0]["label"] == "Retro Blue"
 
 
 def test_load_completed_labels_still_rejects_unknown_nonempty_label(tmp_path):
