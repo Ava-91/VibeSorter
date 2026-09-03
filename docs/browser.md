@@ -2,10 +2,20 @@
 
 VibeSorter includes a local browser for reviewing cached analysis without re-running the classifier.
 
+## Prepare the cache
+
+Before opening a library in the browser, incrementally index it:
+
+```bash
+vibesorter index "E:\\path\\to\\photos"
+```
+
+See [incremental library indexing](indexing.md) for cache behavior and options.
+
 ## Run
 
 ```bash
-vibesorter browser
+vibesorter browser --db "E:\\path\\to\\photos\\.vibesorter\\analysis.db"
 ```
 
 The server binds to `127.0.0.1` by default. Open the printed local URL in a browser.
@@ -13,6 +23,8 @@ The server binds to `127.0.0.1` by default. Open the printed local URL in a brow
 ## Data flow
 
 ```text
+vibesorter index
+        ↓
 SQLite analysis index
         ↓
 /api/vibes ──────────────┐
