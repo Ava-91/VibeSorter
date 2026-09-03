@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ..vibes import VibeScore, confidence_score
+from ..vibes import VibeScore, confidence_score, is_confident
 from .ui import render_page
 
 DEFAULT_LIMIT = 48
@@ -27,7 +27,17 @@ def _table_info(conn: sqlite3.Connection) -> tuple[str | None, dict[str, str]]:
         "vibe": "vibe" if "vibe" in columns else ("primary_vibe" if "primary_vibe" in columns else ""),
         "confidence": "confidence" if "confidence" in columns else ("confidence_score" if "confidence_score" in columns else ""),
         "scores": "scores" if "scores" in columns else "",
+        "features": "features" if "features" in columns else "",
     }
+
+
+def _parse_scores(value: str | None) -> tuple[VibeScore, ...]:
+    if not value:
+        return ()
+    try:
+        return tuple(VibeScore(str(item["name"]), float(item["score"])) for item in json.loads(value))
+    except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+        return ()
 
 
 def _normalize_row(row: sqlite3.Row, columns: dict[str, str]) -> dict:
@@ -36,29 +46,17 @@ def _normalize_row(row: sqlite3.Row, columns: dict[str, str]) -> dict:
     vibe = item.get(columns["vibe"]) if columns["vibe"] else None
     confidence = item.get(columns["confidence"]) if columns["confidence"] else None
     scores = item.get(columns["scores"]) if columns["scores"] else None
-    if scores and (vibe is None or confidence is None):
-        try:
-            parsed = json.loads(scores)
-            parsed_scores = tuple(VibeScore(str(score["name"]), float(score["score"])) for score in parsed)
-            if parsed_scores:
-                vibe = vibe or parsed_scores[0].name
-                confidence = confidence if confidence is not None else confidence_score(parsed_scores)
-        except (TypeError, ValueError, KeyError, json.JSONDecodeError):
-            pass
+    parsed_scores = _parse_scores(scores)
+    if parsed_scores and (vibe is None or confidence is None):
+        vibe = vibe or parsed_scores[0].name
+        confidence = confidence if confidence is not None else confidence_score(parsed_scores)
     item["path"] = str(path or "")
     item["vibe"] = vibe
     item["confidence"] = confidence
     return item
 
 
-def _query_rows(
-    db_path: Path,
-    vibe: str | None,
-    query: str | None,
-    *,
-    limit: int = DEFAULT_LIMIT,
-    offset: int = 0,
-) -> tuple[list[dict], int]:
+def _query_rows(db_path: Path, vibe: str | None, query: str | None, *, limit: int = DEFAULT_LIMIT, offset: int = 0) -> tuple[list[dict], int]:
     if not db_path.exists():
         return [], 0
     limit = max(1, min(limit, MAX_LIMIT))
@@ -102,8 +100,7 @@ def _vibe_summary(db_path: Path) -> list[dict]:
         if columns.get("vibe"):
             select = columns["vibe"]
             confidence_col = columns.get("confidence")
-            rows = conn.execute(f"SELECT {select}, {confidence_col or 'NULL'} FROM {table}")
-            for vibe, confidence in rows:
+            for vibe, confidence in conn.execute(f"SELECT {select}, {confidence_col or 'NULL'} FROM {table}"):
                 label = str(vibe or "Unclassified")
                 counts[label] += 1
                 if isinstance(confidence, (int, float)):
@@ -111,26 +108,54 @@ def _vibe_summary(db_path: Path) -> list[dict]:
                     confidence_counts[label] += 1
         elif columns.get("scores"):
             for (scores,) in conn.execute(f"SELECT {columns['scores']} FROM {table}"):
-                try:
-                    parsed = json.loads(scores)
-                    if not parsed:
-                        counts["Unclassified"] += 1
-                        continue
-                    label = str(parsed[0]["name"])
-                    parsed_scores = tuple(VibeScore(str(item["name"]), float(item["score"])) for item in parsed)
-                    counts[label] += 1
-                    confidence_totals[label] += confidence_score(parsed_scores)
-                    confidence_counts[label] += 1
-                except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+                parsed_scores = _parse_scores(scores)
+                if not parsed_scores:
                     counts["Unclassified"] += 1
+                    continue
+                label = parsed_scores[0].name
+                counts[label] += 1
+                confidence_totals[label] += confidence_score(parsed_scores)
+                confidence_counts[label] += 1
         return [
-            {
-                "vibe": label,
-                "count": counts[label],
-                "average_confidence": round(confidence_totals[label] / confidence_counts[label], 4) if confidence_counts[label] else None,
-            }
+            {"vibe": label, "count": counts[label], "average_confidence": round(confidence_totals[label] / confidence_counts[label], 4) if confidence_counts[label] else None}
             for label in sorted(counts, key=lambda item: (-counts[item], item.casefold()))
         ]
+
+
+def _image_detail(db_path: Path, requested: str) -> dict | None:
+    if not db_path.exists():
+        return None
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        table, columns = _table_info(conn)
+        path_col = columns.get("path")
+        if not table or not path_col:
+            return None
+        row = conn.execute(f"SELECT * FROM {table} WHERE {path_col} = ?", (requested,)).fetchone()
+        if row is None:
+            return None
+        item = _normalize_row(row, columns)
+        scores = _parse_scores(item.get(columns.get("scores", ""))) if columns.get("scores") else ()
+        path = Path(item["path"]).expanduser()
+        features = {}
+        if columns.get("features"):
+            try:
+                raw = json.loads(item.get(columns["features"]) or "{}")
+                for key in ("brightness", "saturation", "contrast", "warm_ratio", "cool_ratio", "grayscale_ratio", "dark_ratio", "light_ratio", "text_likelihood"):
+                    if key in raw:
+                        features[key] = raw[key]
+            except (TypeError, json.JSONDecodeError):
+                pass
+        confidence = float(item["confidence"]) if isinstance(item.get("confidence"), (int, float)) else (confidence_score(scores) if scores else 0.0)
+        return {
+            "path": item["path"],
+            "vibe": item.get("vibe"),
+            "confidence": confidence,
+            "ambiguous": not is_confident(scores) if scores else None,
+            "scores": [{"name": score.name, "score": score.score} for score in scores],
+            "features": features,
+            "file": {"exists": path.is_file(), "size": path.stat().st_size if path.is_file() else None},
+        }
 
 
 def _rows(db_path: Path, vibe: str | None, query: str | None, limit: int = DEFAULT_LIMIT) -> list[dict]:
@@ -158,81 +183,47 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db"):
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, content: str, content_type: str = "text/html; charset=utf-8") -> None:
-            body = content.encode()
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
+            body = content.encode(); self.send_response(status); self.send_header("Content-Type", content_type); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
         def _send_bytes(self, status: int, body: bytes, content_type: str) -> None:
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
+            self.send_response(status); self.send_header("Content-Type", content_type); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
         def do_GET(self) -> None:  # noqa: N802
-            parsed = urlparse(self.path)
-            params = parse_qs(parsed.query)
-            vibe = params.get("vibe", [None])[0]
-            query = params.get("q", [None])[0]
+            parsed = urlparse(self.path); params = parse_qs(parsed.query); vibe = params.get("vibe", [None])[0]; query = params.get("q", [None])[0]
             if parsed.path == "/api/vibes":
-                self._send(200, json.dumps({"items": _vibe_summary(db)}, ensure_ascii=False), "application/json; charset=utf-8")
+                self._send(200, json.dumps({"items": _vibe_summary(db)}, ensure_ascii=False), "application/json; charset=utf-8"); return
+            if parsed.path == "/api/image-details":
+                requested = unquote(params.get("path", [""])[0]); detail = _image_detail(db, requested)
+                if detail is None: self._send(404, "Image not found", "text/plain; charset=utf-8")
+                else: self._send(200, json.dumps(detail, ensure_ascii=False), "application/json; charset=utf-8")
                 return
             try:
-                limit = int(params.get("limit", [DEFAULT_LIMIT])[0])
-                page = max(1, int(params.get("page", [1])[0]))
+                limit = int(params.get("limit", [DEFAULT_LIMIT])[0]); page = max(1, int(params.get("page", [1])[0]))
             except ValueError:
-                self._send(400, "Invalid pagination", "text/plain; charset=utf-8")
-                return
+                self._send(400, "Invalid pagination", "text/plain; charset=utf-8"); return
             if parsed.path == "/api/images":
-                safe_limit = min(max(1, limit), MAX_LIMIT)
-                rows, total = _query_rows(db, vibe, query, limit=safe_limit, offset=(page - 1) * safe_limit)
-                payload = {"items": rows, "page": page, "limit": safe_limit, "total": total}
-                self._send(200, json.dumps(payload, default=str), "application/json; charset=utf-8")
-                return
+                safe_limit = min(max(1, limit), MAX_LIMIT); rows, total = _query_rows(db, vibe, query, limit=safe_limit, offset=(page - 1) * safe_limit)
+                self._send(200, json.dumps({"items": rows, "page": page, "limit": safe_limit, "total": total}, default=str), "application/json; charset=utf-8"); return
             if parsed.path == "/api/image":
-                requested = unquote(params.get("path", [""])[0])
-                image = _image_path(db, requested)
-                if image is None:
-                    self._send(404, "Image not found", "text/plain; charset=utf-8")
-                    return
-                try:
-                    self._send_bytes(200, image.read_bytes(), mimetypes.guess_type(image.name)[0] or "application/octet-stream")
-                except OSError:
-                    self._send(404, "Image not found", "text/plain; charset=utf-8")
+                image = _image_path(db, unquote(params.get("path", [""])[0]))
+                if image is None: self._send(404, "Image not found", "text/plain; charset=utf-8")
+                else:
+                    try: self._send_bytes(200, image.read_bytes(), mimetypes.guess_type(image.name)[0] or "application/octet-stream")
+                    except OSError: self._send(404, "Image not found", "text/plain; charset=utf-8")
                 return
-            if parsed.path != "/":
-                self._send(404, "Not found", "text/plain; charset=utf-8")
-                return
+            if parsed.path != "/": self._send(404, "Not found", "text/plain; charset=utf-8"); return
             self._send(200, render_page())
-
-        def log_message(self, *_args) -> None:
-            return
-
+        def log_message(self, *_args) -> None: return
     return Handler
 
 
 def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = ThreadingHTTPServer((host, port), create_app(db_path))
-    print(f"VibeSorter browser: http://{host}:{port}")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
+    server = ThreadingHTTPServer((host, port), create_app(db_path)); print(f"VibeSorter browser: http://{host}:{port}")
+    try: server.serve_forever()
+    except KeyboardInterrupt: pass
+    finally: server.server_close()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Browse VibeSorter analysis locally.")
-    parser.add_argument("--db", default=".vibesorter/analysis.db")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
-    args = parser.parse_args()
-    run_server(args.db, args.host, args.port)
+    parser = argparse.ArgumentParser(description="Browse VibeSorter analysis locally."); parser.add_argument("--db", default=".vibesorter/analysis.db"); parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, default=8765); args = parser.parse_args(); run_server(args.db, args.host, args.port)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
