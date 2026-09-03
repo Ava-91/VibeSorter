@@ -137,3 +137,36 @@ def test_index_command_parses_folder_and_options(monkeypatch, capsys, tmp_path):
     assert data["total"] == 2
     assert data["analyzed"] == 1
     assert data["reused"] == 1
+
+
+def test_sample_labels_command(monkeypatch, capsys, tmp_path):
+    output = tmp_path / "labels.jsonl"
+    monkeypatch.setattr(
+        entrypoint,
+        "sample_labels",
+        lambda folder, count, output, recursive: {
+            "available": 1303,
+            "selected": count,
+            "output": str(output),
+        },
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["vibesorter", "sample-labels", str(tmp_path), "--count", "150", "--output", str(output), "--no-recursive"],
+    )
+
+    assert entrypoint.main() == 0
+    text = capsys.readouterr().out
+    assert "Sampled 150 image(s) from 1303" in text
+    assert f"Label template: {output}" in text
+
+
+def test_sample_labels_rejects_zero_count(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "argv", ["vibesorter", "sample-labels", str(tmp_path), "--count", "0"])
+    try:
+        entrypoint.main()
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected argparse validation failure")
