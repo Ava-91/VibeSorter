@@ -32,6 +32,8 @@ Then make one quick decision:
 
 Every accepted/corrected decision is written immediately to the JSONL file, so closing the browser or stopping the server does not discard completed labels. Starting the same session again resumes from already-labelled paths. Skipped images remain unlabelled and can be reviewed later.
 
+If you previously ran `sample-labels` and already have a JSONL file containing records such as `{"path":"...","label":""}`, you can pass that same file to `label`. Empty labels are treated as pending work; they are not errors. Once a decision is saved, the corresponding record becomes a completed human label. Invalid non-empty labels are still rejected.
+
 The output records the human decision separately from the classifier proposal, for example:
 
 ```json
@@ -60,7 +62,7 @@ Do not commit private images or a private library's labels file to the repositor
 vibesorter sample-labels "E:\\Ava files\\Pictures\\Billie Eilish" --count 150 --output labels.jsonl
 ```
 
-It discovers supported image files, selects evenly distributed paths from the sorted file list, and writes blank labels. It is intentionally manual; the `label` command is the recommended workflow for classifier evaluation.
+It discovers supported image files, selects evenly distributed paths from the sorted file list, and writes blank labels. It is intentionally manual; the `label` command is the recommended workflow for classifier evaluation. A template from this command can also be used directly as the starting point for `label`.
 
 ## 2. Run the evaluation
 
