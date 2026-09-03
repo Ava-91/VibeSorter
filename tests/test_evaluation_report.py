@@ -27,10 +27,17 @@ def test_evaluation_report_includes_f1_and_ambiguity(tmp_path: Path) -> None:
     assert len(report.calibration) == 10
 
 
-def test_f1_is_zero_for_vibe_without_support() -> None:
-    image = LabelledImage(Path("unused"), "Red / Warm")
-    report = evaluate_dataset((image,)) if False else None
-    assert report is None
+def test_zero_support_vibe_metrics_are_zero(tmp_path: Path) -> None:
+    image = tmp_path / "red.png"
+    Image.new("RGB", (20, 20), (230, 20, 20)).save(image)
+
+    report = evaluate_dataset((LabelledImage(image, "Red / Warm"),))
+    metrics = report.metrics.per_vibe["Soft / Pastel"]
+
+    assert metrics["support"] == 0
+    assert metrics["precision"] == 0.0
+    assert metrics["recall"] == 0.0
+    assert metrics["f1"] == 0.0
 
 
 def test_expected_calibration_error_is_zero_for_empty_data() -> None:
