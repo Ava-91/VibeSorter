@@ -2,60 +2,184 @@ from __future__ import annotations
 
 import argparse
 import json
+import mimetypes
 import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .ui import render_page
 
+DEFAULT_LIMIT = 48
+MAX_LIMIT = 120
 
-def _rows(db_path: Path, vibe: str | None, query: str | None, limit: int = 100) -> list[dict]:
-    if not db_path.exists(): return []
+
+def _table_info(conn: sqlite3.Connection) -> tuple[str | None, dict[str, str]]:
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    table = "images" if "images" in tables else ("analysis" if "analysis" in tables else None)
+    if table is None:
+        return None, {}
+    columns = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+    return table, {
+        "path": "path" if "path" in columns else ("image_path" if "image_path" in columns else ""),
+        "vibe": "vibe" if "vibe" in columns else ("primary_vibe" if "primary_vibe" in columns else ""),
+        "confidence": "confidence" if "confidence" in columns else ("confidence_score" if "confidence_score" in columns else ""),
+        "scores": "scores" if "scores" in columns else "",
+    }
+
+
+def _normalize_row(row: sqlite3.Row, columns: dict[str, str]) -> dict:
+    item = dict(row)
+    path = item.get(columns["path"]) if columns["path"] else None
+    vibe = item.get(columns["vibe"]) if columns["vibe"] else None
+    confidence = item.get(columns["confidence"]) if columns["confidence"] else None
+    scores = item.get(columns["scores"]) if columns["scores"] else None
+    if scores and (vibe is None or confidence is None):
+        try:
+            parsed = json.loads(scores)
+            if parsed:
+                vibe = vibe or parsed[0].get("name")
+                winner = float(parsed[0].get("score", 0.0))
+                runner_up = float(parsed[1].get("score", 0.0)) if len(parsed) > 1 else 0.0
+                confidence = confidence if confidence is not None else round(0.65 * winner + 0.35 * max(0.0, winner - runner_up) / 0.25, 4)
+        except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+            pass
+    item["path"] = str(path or "")
+    item["vibe"] = vibe
+    item["confidence"] = confidence
+    return item
+
+
+def _query_rows(
+    db_path: Path,
+    vibe: str | None,
+    query: str | None,
+    *,
+    limit: int = DEFAULT_LIMIT,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    if not db_path.exists():
+        return [], 0
+    limit = max(1, min(limit, MAX_LIMIT))
+    offset = max(0, offset)
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        table = "analysis" if "analysis" in tables else ("images" if "images" in tables else None)
-        if table is None: return []
-        columns = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
-        path_col = "path" if "path" in columns else ("image_path" if "image_path" in columns else None)
-        vibe_col = "vibe" if "vibe" in columns else ("primary_vibe" if "primary_vibe" in columns else None)
-        score_col = "confidence" if "confidence" in columns else ("confidence_score" if "confidence_score" in columns else None)
-        if not path_col: return []
-        where, args = [], []
-        if vibe and vibe_col: where.append(f"{vibe_col} = ?"); args.append(vibe)
-        if query: where.append(f"{path_col} LIKE ?"); args.append(f"%{query}%")
-        sql = f"SELECT * FROM {table}" + ((" WHERE " + " AND ".join(where)) if where else "") + " LIMIT ?"
-        args.append(max(1, min(limit, 500)))
-        result = []
-        for row in conn.execute(sql, args):
-            item = dict(row); item["path"] = item.get(path_col); item["vibe"] = item.get(vibe_col) if vibe_col else None; item["confidence"] = item.get(score_col) if score_col else None; result.append(item)
-        return result
+        table, columns = _table_info(conn)
+        path_col = columns.get("path")
+        if not table or not path_col:
+            return [], 0
+        where: list[str] = []
+        args: list[str] = []
+        vibe_col = columns.get("vibe")
+        if vibe and vibe_col:
+            where.append(f"{vibe_col} = ?")
+            args.append(vibe)
+        if query:
+            where.append(f"{path_col} LIKE ?")
+            args.append(f"%{query}%")
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        total = conn.execute(f"SELECT COUNT(*) FROM {table}{clause}", args).fetchone()[0]
+        sql = f"SELECT * FROM {table}{clause} ORDER BY {path_col} COLLATE NOCASE LIMIT ? OFFSET ?"
+        rows = [_normalize_row(row, columns) for row in conn.execute(sql, [*args, limit, offset])]
+        return rows, total
+
+
+def _rows(db_path: Path, vibe: str | None, query: str | None, limit: int = DEFAULT_LIMIT) -> list[dict]:
+    rows, _ = _query_rows(db_path, vibe, query, limit=limit)
+    return rows
+
+
+def _image_path(db_path: Path, requested: str) -> Path | None:
+    if not db_path.exists():
+        return None
+    with sqlite3.connect(db_path) as conn:
+        table, columns = _table_info(conn)
+        path_col = columns.get("path")
+        if not table or not path_col:
+            return None
+        row = conn.execute(f"SELECT {path_col} FROM {table} WHERE {path_col} = ?", (requested,)).fetchone()
+    if not row:
+        return None
+    path = Path(row[0]).expanduser()
+    return path if path.is_file() else None
 
 
 def create_app(db_path: str | Path = ".vibesorter/analysis.db"):
     db = Path(db_path)
+
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, content: str, content_type: str = "text/html; charset=utf-8") -> None:
-            body = content.encode(); self.send_response(status); self.send_header("Content-Type", content_type); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+            body = content.encode()
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _send_bytes(self, status: int, body: bytes, content_type: str) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         def do_GET(self) -> None:  # noqa: N802
-            parsed = urlparse(self.path); params = parse_qs(parsed.query); vibe = params.get("vibe", [None])[0]; query = params.get("q", [None])[0]
-            if parsed.path == "/api/images": self._send(200, json.dumps(_rows(db, vibe, query), default=str), "application/json"); return
-            if parsed.path != "/": self._send(404, "Not found", "text/plain; charset=utf-8"); return
-            self._send(200, render_page(_rows(db, vibe, query), vibe, query))
-        def log_message(self, *_args) -> None: return
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+            vibe = params.get("vibe", [None])[0]
+            query = params.get("q", [None])[0]
+            try:
+                limit = int(params.get("limit", [DEFAULT_LIMIT])[0])
+                page = max(1, int(params.get("page", [1])[0]))
+            except ValueError:
+                self._send(400, "Invalid pagination", "text/plain; charset=utf-8")
+                return
+            if parsed.path == "/api/images":
+                rows, total = _query_rows(db, vibe, query, limit=limit, offset=(page - 1) * min(limit, MAX_LIMIT))
+                payload = {"items": rows, "page": page, "limit": min(max(1, limit), MAX_LIMIT), "total": total}
+                self._send(200, json.dumps(payload, default=str), "application/json; charset=utf-8")
+                return
+            if parsed.path == "/api/image":
+                requested = unquote(params.get("path", [""])[0])
+                image = _image_path(db, requested)
+                if image is None:
+                    self._send(404, "Image not found", "text/plain; charset=utf-8")
+                    return
+                try:
+                    self._send_bytes(200, image.read_bytes(), mimetypes.guess_type(image.name)[0] or "application/octet-stream")
+                except OSError:
+                    self._send(404, "Image not found", "text/plain; charset=utf-8")
+                return
+            if parsed.path != "/":
+                self._send(404, "Not found", "text/plain; charset=utf-8")
+                return
+            self._send(200, render_page())
+
+        def log_message(self, *_args) -> None:
+            return
+
     return Handler
 
 
 def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = ThreadingHTTPServer((host, port), create_app(db_path)); print(f"VibeSorter browser: http://{host}:{port}")
-    try: server.serve_forever()
-    except KeyboardInterrupt: pass
-    finally: server.server_close()
+    server = ThreadingHTTPServer((host, port), create_app(db_path))
+    print(f"VibeSorter browser: http://{host}:{port}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Browse VibeSorter analysis locally.")
-    parser.add_argument("--db", default=".vibesorter/analysis.db"); parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, default=8765); args = parser.parse_args(); run_server(args.db, args.host, args.port)
+    parser.add_argument("--db", default=".vibesorter/analysis.db")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8765)
+    args = parser.parse_args()
+    run_server(args.db, args.host, args.port)
 
-if __name__ == "__main__": main()
+
+if __name__ == "__main__":
+    main()
