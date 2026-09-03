@@ -42,11 +42,11 @@ def test_vibe_scores_are_sorted_and_complete(tmp_path: Path) -> None:
     features = extract_features(image)
     scores = score_vibes(features)
 
-    assert len(scores) == 7
+    assert len(scores) == 8
     assert scores[0].score >= scores[-1].score
     assert {result.name for result in scores} == {
         "Retro Blue", "Red / Warm", "Green & Black", "Black & White",
-        "Soft / Pastel", "Dark / Moody", "Bright / Colorful",
+        "Soft / Pastel", "Dark / Moody", "Bright / Colorful", "Neutral / Photo Dump",
     }
     assert classify(features) == scores[0]
     assert scores[0].name == "Red / Warm"
@@ -122,3 +122,26 @@ def test_pastel_darkness_penalty_is_explainable() -> None:
     contributions = score_vibe_contributions(features)["Soft / Pastel"]
     assert contributions["darkness_penalty"] < 0
     assert sum(contributions.values()) < 0.45
+
+
+def test_neutral_photo_dump_is_an_eighth_score_with_explainable_contribution() -> None:
+    features = _feature_snapshot(
+        brightness=0.50, saturation=0.34, contrast=0.25,
+        dark=0.18, light=0.24, cool=0.16,
+    )
+    scores = score_vibes(features)
+    contributions = score_vibe_contributions(features)
+
+    assert scores[0].name == "Neutral / Photo Dump"
+    assert contributions["Neutral / Photo Dump"]["absence_of_strong_aesthetic"] == scores[0].score
+    assert sum(contributions["Neutral / Photo Dump"].values()) == scores[0].score
+
+
+def test_strong_aesthetic_does_not_get_relabelled_as_neutral() -> None:
+    features = _feature_snapshot(
+        brightness=0.45, saturation=0.40, contrast=0.40,
+        dark=0.40, light=0.30, cool=0.20,
+        regions=(),
+    )
+    scores = dict((score.name, score.score) for score in score_vibes(features))
+    assert scores["Neutral / Photo Dump"] < scores["Green & Black"]
