@@ -6,6 +6,7 @@ from pathlib import Path
 
 import vibesorter.entrypoint as entrypoint
 from vibesorter.benchmark import BenchmarkResult
+from vibesorter.evaluation import ClassificationMetrics, EvaluationReport
 from vibesorter.explain import Explanation
 
 
@@ -26,6 +27,38 @@ def test_benchmark_command_json(monkeypatch, capsys, tmp_path):
 
 def test_benchmark_rejects_zero_repeats(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "argv", ["vibesorter", "benchmark", str(tmp_path), "--repeats", "0"])
+    try:
+        entrypoint.main()
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected argparse validation failure")
+
+
+def test_evaluate_command_json(monkeypatch, capsys, tmp_path):
+    labels = tmp_path / "labels.jsonl"
+    labels.write_text("{}\n", encoding="utf-8")
+    metrics = ClassificationMetrics(
+        total=4,
+        correct=3,
+        accuracy=0.75,
+        per_vibe={"Red / Warm": {"support": 2, "precision": 0.8, "recall": 1.0, "f1": 0.8889}},
+        confusion_matrix={"Red / Warm": {"Red / Warm": 2}},
+    )
+    report = EvaluationReport(metrics, 4, 1, 0.25, 0.1, [])
+    monkeypatch.setattr(entrypoint, "evaluate_dataset", lambda loaded, bins: report)
+    monkeypatch.setattr(sys, "argv", ["vibesorter", "evaluate", str(labels), "--bins", "5", "--json"])
+    monkeypatch.setattr(entrypoint, "load_labels", lambda path: ())
+
+    assert entrypoint.main() == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["metrics"]["accuracy"] == 0.75
+    assert data["metrics"]["per_vibe"]["Red / Warm"]["f1"] == 0.8889
+    assert data["ambiguous_rate"] == 0.25
+
+
+def test_evaluate_rejects_zero_bins(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "argv", ["vibesorter", "evaluate", str(tmp_path / "labels.jsonl"), "--bins", "0"])
     try:
         entrypoint.main()
     except SystemExit as exc:
