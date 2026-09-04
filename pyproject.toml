@@ -26,3 +26,5 @@ where = ["src"]
 "src/vibesorter/indexer.py" = ["BLE001"]
 # Invalid proposal structure is reported as ValueError because the JSON value has the wrong shape.
 "src/vibesorter/gallery.py" = ["TRY004"]
+# These test assertions intentionally use compact idioms flagged only by optional style rules.
+"tests/test_vibes.py" = ["C402"]
