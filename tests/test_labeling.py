@@ -88,5 +88,5 @@ def test_label_page_contains_local_review_controls(tmp_path):
     page = render_label_page(session)
     assert "Assisted labeling" in page
     assert "/api/label/decision" in page
-    assert "Enter" in page and "1–7" in page and "Skip" in page and "Undo" in page
+    assert "Enter" in page and "1–8" in page and "Skip" in page and "Undo" in page
     assert str((tmp_path / "a.jpg").resolve()) in page
