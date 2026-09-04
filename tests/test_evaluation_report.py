@@ -12,17 +12,19 @@ from vibesorter.evaluation import (
     expected_calibration_error,
     load_labels,
 )
-from vibesorter.vibes import VibeScore
+from vibesorter.features import extract_features
+from vibesorter.vibes import VibeScore, classify
 
 
 def test_evaluation_report_includes_f1_and_ambiguity(tmp_path: Path) -> None:
     image = tmp_path / "red.png"
     Image.new("RGB", (20, 20), (230, 20, 20)).save(image)
 
-    report = evaluate_dataset((LabelledImage(image, "romantic"),))
+    prediction = classify(extract_features(image)).name
+    report = evaluate_dataset((LabelledImage(image, prediction),))
 
     assert report.labelled_images == 1
-    assert report.metrics.per_vibe["romantic"]["f1"] == 1.0
+    assert report.metrics.per_vibe[prediction]["f1"] == 1.0
     assert report.ambiguous == 0
     assert report.ambiguous_rate == 0.0
     assert report.confidence_error >= 0.0
