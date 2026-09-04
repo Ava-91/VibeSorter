@@ -179,3 +179,4 @@ def classify(features: ImageFeatures) -> VibeScore:
 
 
 CANONICAL_VIBES = tuple(item.value for item in Vibe)
+VIBES = CANONICAL_VIBES
