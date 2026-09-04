@@ -18,8 +18,18 @@ from .gallery import gallery_from_file
 from .history import list_history, record_batch, rollback_batch
 from .operations import apply_reviewed
 from .pipeline import analyze_image
-from .proposal import build_proposal, proposal_from_dict, proposal_to_dict, proposal_to_json
-from .review import parse_selection, review_proposal, reviewed_from_dict, reviewed_to_json
+from .proposal import (
+    build_proposal,
+    proposal_from_dict,
+    proposal_to_dict,
+    proposal_to_json,
+)
+from .review import (
+    parse_selection,
+    review_proposal,
+    reviewed_from_dict,
+    reviewed_to_json,
+)
 from .scanner import find_images
 from .search import ImageQuery, search_cache
 from .vibes import VIBES
