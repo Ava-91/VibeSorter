@@ -3,9 +3,6 @@ from __future__ import annotations
 import html
 
 
-FILTER_FAMILIES = ("media_type", "colors", "temperature", "saturation", "brightness", "vibes")
-
-
 def render_page(rows: list[dict] | None = None, vibe: str | None = None, query: str | None = None) -> str:
     initial = "" if rows is None else "".join(_card(row) for row in rows)
     return f"""<!doctype html>
