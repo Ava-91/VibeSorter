@@ -10,7 +10,15 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ..profile import ImageProfile
-from ..taxonomy import ATTRIBUTE_FAMILIES, Brightness, Color, MediaType, Saturation, Temperature, Vibe
+from ..taxonomy import (
+    ATTRIBUTE_FAMILIES,
+    Brightness,
+    Color,
+    MediaType,
+    Saturation,
+    Temperature,
+    Vibe,
+)
 from ..vibes import VibeScore, confidence_score, is_confident
 from .labeling_ui import render_label_page
 from .ui import render_page
@@ -94,7 +102,22 @@ def _profile_for(conn: sqlite3.Connection, path: str) -> ImageProfile | None:
         return None
 
 
-def _query_rows(db_path: Path, params: dict[str, list[str]], *, limit: int, offset: int) -> tuple[list[dict], int]:
+def _query_rows(
+    db_path: Path,
+    params_or_vibe: dict[str, list[str]] | str | None,
+    query: str | None = None,
+    *,
+    limit: int,
+    offset: int,
+) -> tuple[list[dict], int]:
+    if isinstance(params_or_vibe, dict):
+        params = params_or_vibe
+    else:
+        params = {}
+        if params_or_vibe:
+            params["vibe"] = [params_or_vibe]
+        if query:
+            params["q"] = [query]
     if not db_path.exists():
         return [], 0
     limit = max(1, min(limit, MAX_LIMIT))
@@ -105,12 +128,12 @@ def _query_rows(db_path: Path, params: dict[str, list[str]], *, limit: int, offs
         if not table or not columns.get("path"):
             return [], 0
         rows = conn.execute(f"SELECT * FROM {table} ORDER BY {columns['path']} COLLATE NOCASE").fetchall()
-        query = (params.get("q", [""])[0] or "").casefold()
+        query_text = (params.get("q", [""])[0] or "").casefold()
         vibe = (params.get("vibe", [""])[0] or "").casefold()
         matches: list[dict] = []
         for row in rows:
             item = _normalize_row(row, columns)
-            if query and query not in item["path"].casefold():
+            if query_text and query_text not in item["path"].casefold():
                 continue
             if vibe and str(item.get("vibe") or "").casefold() != vibe:
                 parsed = _parse_scores(item.get(columns.get("scores", ""))) if columns.get("scores") else ()
@@ -121,6 +144,11 @@ def _query_rows(db_path: Path, params: dict[str, list[str]], *, limit: int, offs
             matches.append(item)
         total = len(matches)
         return matches[offset : offset + limit], total
+
+
+def _rows(db_path: Path, vibe: str | None, query: str | None) -> list[dict]:
+    rows, _ = _query_rows(db_path, vibe, query, limit=MAX_LIMIT, offset=0)
+    return rows
 
 
 def _vibe_summary(db_path: Path) -> list[dict]:
@@ -257,10 +285,3 @@ def run_label_server(label_session, *, db_path: str | Path, host: str = "127.0.0
     try: server.serve_forever()
     except KeyboardInterrupt: pass
     finally: server.server_close()
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Browse VibeSorter analysis locally."); parser.add_argument("--db", default=".vibesorter/analysis.db"); parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, default=8765); args = parser.parse_args(); run_server(args.db, args.host, args.port)
-
-
-if __name__ == "__main__": main()
