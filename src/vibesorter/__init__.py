@@ -32,13 +32,12 @@ from .taxonomy import (
     Temperature,
     Vibe,
 )
-from .vibes import VIBES, VibeScore, classify, score_vibes, select_vibes
+from .vibes import VibeScore, classify, score_vibes, select_vibes
 
 __all__ = [
     "ATTRIBUTE_CARDINALITY",
     "ATTRIBUTE_FAMILIES",
     "TAXONOMY_VERSION",
-    "VIBES",
     "AnalysisCache",
     "AnalysisResult",
     "AttributeValue",
