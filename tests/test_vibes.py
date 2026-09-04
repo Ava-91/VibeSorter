@@ -5,7 +5,14 @@ from pathlib import Path
 from PIL import Image
 
 from vibesorter.features import ImageFeatures, extract_features
-from vibesorter.vibes import VibeScore, classify, confidence_score, is_confident, score_vibe_contributions, score_vibes
+from vibesorter.vibes import (
+    VibeScore,
+    classify,
+    confidence_score,
+    is_confident,
+    score_vibe_contributions,
+    score_vibes,
+)
 
 
 def make_image(path: Path, color: tuple[int, int, int]) -> None:
@@ -94,7 +101,7 @@ def test_dark_muted_fixture_is_not_promoted_to_soft_pastel() -> None:
         brightness=0.4079, saturation=0.2811, contrast=0.1977,
         dark=0.3532, light=0.0174, cool=0.2122,
     )
-    scores = dict((score.name, score.score) for score in score_vibes(features))
+    scores = {score.name: score.score for score in score_vibes(features)}
     assert scores["Soft / Pastel"] < 0.45
 
 
@@ -143,5 +150,5 @@ def test_strong_aesthetic_does_not_get_relabelled_as_neutral() -> None:
         dark=0.65, light=0.15, cool=0.05,
         rgb=(20, 110, 20),
     )
-    scores = dict((score.name, score.score) for score in score_vibes(features))
+    scores = {score.name: score.score for score in score_vibes(features)}
     assert scores["Green & Black"] > scores["Neutral / Photo Dump"]
