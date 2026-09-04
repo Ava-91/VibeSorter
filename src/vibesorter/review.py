@@ -89,7 +89,7 @@ def reviewed_to_json(
 def reviewed_from_dict(data: dict) -> tuple[ReviewedOperation, ...]:
     """Deserialize the reviewed decisions from a proposal JSON document."""
     if not isinstance(data, dict) or not isinstance(data.get("review"), list):
-        raise ValueError("reviewed proposal must contain a review list")
+        raise TypeError("reviewed proposal must contain a review list")
     from .proposal import proposal_from_dict
 
     proposal_data = {key: value for key, value in data.items() if key != "review"}
@@ -100,11 +100,11 @@ def reviewed_from_dict(data: dict) -> tuple[ReviewedOperation, ...]:
     by_id: dict[int, str] = {}
     for item in review:
         if not isinstance(item, dict):
-            raise ValueError("review entries must be objects")
+            raise TypeError("review entries must be objects")
         operation_id = item.get("id")
         status = item.get("status")
         if not isinstance(operation_id, int):
-            raise ValueError("review operation IDs must be integers")
+            raise TypeError("review operation IDs must be integers")
         if status not in {"pending", "accepted", "rejected"}:
             raise ValueError(f"Unsupported review status: {status!r}")
         if operation_id in by_id:

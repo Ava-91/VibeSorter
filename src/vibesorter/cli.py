@@ -9,7 +9,11 @@ from pathlib import Path
 from uuid import uuid4
 
 from .cache import AnalysisCache
-from .duplicates import DEFAULT_MAX_DISTANCE, find_exact_duplicates, find_near_duplicates
+from .duplicates import (
+    DEFAULT_MAX_DISTANCE,
+    find_exact_duplicates,
+    find_near_duplicates,
+)
 from .gallery import gallery_from_file
 from .history import list_history, record_batch, rollback_batch
 from .operations import apply_reviewed
@@ -224,7 +228,11 @@ def _run_apply(args, parser) -> int:
         reviewed = reviewed_from_dict(data)
     except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
         parser.error(f"invalid reviewed proposal: {exc}")
-    results = apply_reviewed(reviewed, confirm=args.confirm and not args.dry_run)
+    results = apply_reviewed(
+        reviewed,
+        confirm=args.confirm and not args.dry_run,
+        dry_run=args.dry_run,
+    )
     if args.confirm and not args.dry_run: record_batch(args.history, str(uuid4()), results)
     if args.json: print(json.dumps(results, indent=2, ensure_ascii=False, default=str))
     else: print(f"Applied {len(results)} operation(s).")
