@@ -5,7 +5,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .features import extract_features
-from .vibes import VIBES, classify, confidence_score, is_confident, score_vibes
+from .taxonomy import Vibe
+from .vibes import classify, confidence_score, is_confident, score_vibes
+
+CANONICAL_VIBES = tuple(item.value for item in Vibe)
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +30,7 @@ def load_labels(path: str | Path) -> tuple[LabelledImage, ...]:
             image_path = Path(data["path"]).expanduser()
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"invalid evaluation record on line {line_number}") from exc
-        if label not in VIBES:
+        if label not in CANONICAL_VIBES:
             raise ValueError(f"unknown vibe label on line {line_number}: {label}")
         records.append(LabelledImage(image_path, label))
     return tuple(records)
@@ -46,17 +49,20 @@ class ClassificationMetrics:
 
 
 def _metrics(labels: tuple[LabelledImage, ...], predictor) -> ClassificationMetrics:
-    matrix = {actual: {predicted: 0 for predicted in VIBES} for actual in VIBES}
+    matrix = {
+        actual: {predicted: 0 for predicted in CANONICAL_VIBES}
+        for actual in CANONICAL_VIBES
+    }
     for item in labels:
         matrix[item.label][predictor(item.path).name] += 1
 
     total = sum(sum(row.values()) for row in matrix.values())
-    correct = sum(matrix[vibe][vibe] for vibe in VIBES)
+    correct = sum(matrix[vibe][vibe] for vibe in CANONICAL_VIBES)
     per_vibe = {}
-    for vibe in VIBES:
+    for vibe in CANONICAL_VIBES:
         tp = matrix[vibe][vibe]
         actual = sum(matrix[vibe].values())
-        predicted = sum(matrix[actual_vibe][vibe] for actual_vibe in VIBES)
+        predicted = sum(matrix[actual_vibe][vibe] for actual_vibe in CANONICAL_VIBES)
         precision = tp / predicted if predicted else 0.0
         recall = tp / actual if actual else 0.0
         f1 = (2 * precision * recall / (precision + recall)) if precision + recall else 0.0
