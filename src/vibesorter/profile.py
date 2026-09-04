@@ -4,7 +4,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .taxonomy import TAXONOMY_VERSION, ATTRIBUTE_FAMILIES, is_legacy_label
+from .taxonomy import ATTRIBUTE_FAMILIES, TAXONOMY_VERSION, is_legacy_label
 
 
 @dataclass(frozen=True, slots=True)
