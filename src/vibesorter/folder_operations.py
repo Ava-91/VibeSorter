@@ -30,6 +30,8 @@ def review_folder_plan(
     """Turn a dry-run proposal into explicit pending/accepted/rejected decisions."""
     accepted = accept_ids or set()
     rejected = reject_ids or set()
+    if accepted & rejected:
+        raise ValueError("an operation cannot be both accepted and rejected")
     return tuple(
         FolderDecision(
             operation,
@@ -59,7 +61,9 @@ def validate_folder_plan(decisions: tuple[FolderDecision, ...]) -> tuple[str, ..
             blockers.append(f"#{decision.operation.id}: duplicate destination: {destination}")
         destinations.add(key)
         if destination.exists():
-            blockers.append(f"#{decision.operation.id}: destination already exists: {destination}")
+            blockers.append(
+                f"#{decision.operation.id}: destination already exists: {destination}"
+            )
         if decision.operation.confidence < 0.60:
             blockers.append(
                 f"#{decision.operation.id}: low-confidence classification "
