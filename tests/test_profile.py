@@ -26,6 +26,6 @@ def test_invalid_confidence_is_rejected():
         AttributeValue("red", 1.1)
 
 
-def test_legacy_compound_labels_are_rejected():
-    with pytest.raises(ValueError, match="legacy compound label"):
-        AttributeValue("Red / Warm", 0.9)
+def test_legacy_compound_labels_are_rejected_by_profile():
+    with pytest.raises(ValueError, match="invalid vibes value"):
+        ImageProfile(vibes=(AttributeValue("Red / Warm", 0.9),))
