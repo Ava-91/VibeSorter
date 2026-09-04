@@ -1,7 +1,6 @@
 from vibesorter.taxonomy import (
     ATTRIBUTE_CARDINALITY,
     ATTRIBUTE_FAMILIES,
-    LEGACY_COMPOUND_VIBES,
     TAXONOMY_VERSION,
     Brightness,
     Color,
@@ -9,7 +8,7 @@ from vibesorter.taxonomy import (
     Saturation,
     Temperature,
     Vibe,
-    is_legacy_label,
+    is_valid_attribute_value,
 )
 
 
@@ -40,8 +39,8 @@ def test_taxonomy_values_are_machine_friendly():
     assert Vibe.RETRO.value == "retro"
 
 
-def test_legacy_labels_are_identified_but_not_part_of_v2_families():
-    assert "Retro Blue" in LEGACY_COMPOUND_VIBES
-    assert is_legacy_label("Retro Blue")
-    assert not is_legacy_label("red")
+def test_compound_labels_are_not_canonical_values():
+    assert not is_valid_attribute_value("vibes", "Retro Blue")
+    assert not is_valid_attribute_value("vibes", "Dark / Moody")
+    assert is_valid_attribute_value("vibes", "retro")
     assert TAXONOMY_VERSION == "2.0"

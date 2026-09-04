@@ -16,15 +16,15 @@ def _safe_name(value: str) -> str:
     return value or "Unclassified"
 
 
-def _folder_value(profile: ImageProfile | None, family: str) -> str:
+def _folder_value(profile: ImageProfile | None, family: str) -> tuple[str, float]:
     if family not in FOLDERABLE_FAMILIES:
         raise ValueError(f"unknown folder attribute: {family}")
     if profile is None:
-        return "Unclassified"
+        return "Unclassified", 0.0
     value = getattr(profile, family)
     if isinstance(value, tuple):
         value = max(value, key=lambda item: item.confidence, default=None)
-    return _safe_name(value.value) if value else "Unclassified"
+    return (_safe_name(value.value), value.confidence) if value else ("Unclassified", 0.0)
 
 
 def build_attribute_proposal(
@@ -43,17 +43,16 @@ def build_attribute_proposal(
     operations: list[MoveOperation] = []
     for index, result in enumerate(ordered, start=1):
         profile = profiles.get(result.path, profiles.get(str(result.path)))
-        folder = _folder_value(profile, primary_attribute)
+        folder, confidence = _folder_value(profile, primary_attribute)
         destination = root / folder / _safe_name(result.path.name)
-        key = destination.as_posix().casefold()
         stem, suffix = destination.stem, destination.suffix
+        key = destination.as_posix().casefold()
         counter = 2
         while key in used:
             destination = destination.with_name(f"{stem} ({counter}){suffix}")
             key = destination.as_posix().casefold()
             counter += 1
         used.add(key)
-        confidence = _folder_confidence(profile, primary_attribute)
         operations.append(
             MoveOperation(
                 id=index,
@@ -66,12 +65,3 @@ def build_attribute_proposal(
             )
         )
     return MoveProposal(version=2, output_root=str(root), operations=tuple(operations))
-
-
-def _folder_confidence(profile: ImageProfile | None, family: str) -> float:
-    if profile is None:
-        return 0.0
-    value = getattr(profile, family)
-    if isinstance(value, tuple):
-        return max((item.confidence for item in value), default=0.0)
-    return value.confidence if value is not None else 0.0

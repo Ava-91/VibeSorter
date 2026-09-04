@@ -4,7 +4,12 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .taxonomy import ATTRIBUTE_FAMILIES, TAXONOMY_VERSION, is_legacy_label
+from .taxonomy import (
+    ATTRIBUTE_CARDINALITY,
+    ATTRIBUTE_FAMILIES,
+    TAXONOMY_VERSION,
+    is_valid_attribute_value,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,8 +25,6 @@ class AttributeValue:
             raise ValueError("attribute confidence must be between 0 and 1")
         if not self.source:
             raise ValueError("attribute source must not be empty")
-        if is_legacy_label(self.value):
-            raise ValueError(f"legacy compound label is not valid: {self.value}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,8 +40,18 @@ class ImageProfile:
     def __post_init__(self) -> None:
         if self.taxonomy_version != TAXONOMY_VERSION:
             raise ValueError(f"unsupported taxonomy version: {self.taxonomy_version}")
-        self._validate_multi(self.colors, "colors")
-        self._validate_multi(self.vibes, "vibes")
+        for family in ATTRIBUTE_FAMILIES:
+            value = getattr(self, family)
+            values = (
+                value
+                if ATTRIBUTE_CARDINALITY[family] == "multi"
+                else (() if value is None else (value,))
+            )
+            for item in values:
+                if not is_valid_attribute_value(family, item.value):
+                    raise ValueError(f"invalid {family} value: {item.value}")
+            if ATTRIBUTE_CARDINALITY[family] == "multi":
+                self._validate_multi(values, family)
 
     @staticmethod
     def _validate_multi(values: tuple[AttributeValue, ...], family: str) -> None:
