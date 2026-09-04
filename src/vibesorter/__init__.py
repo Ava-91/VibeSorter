@@ -10,7 +10,9 @@ from .evaluation import (
 )
 from .features import ColorSample, ImageFeatures, SpatialRegion, extract_features
 from .learned import LearnedClassifier, feature_vector
+from .learned_profile import LearnedProfileClassifier
 from .library import LibraryAnalysisStats, analyze_library, analyze_library_stats
+from .multilabel import MultiLabelMetrics, evaluate_family, evaluate_profiles
 from .pipeline import AnalysisResult, analyze_folder, analyze_image
 from .profile import AttributeValue, ImageProfile
 from .search import ImageQuery, search_cache
@@ -25,11 +27,11 @@ __all__ = [
     "ATTRIBUTE_FAMILIES", "AttributeValue", "Brightness", "ClassificationMetrics",
     "Color", "ColorSample", "ConfidenceCalibrator", "ConfidenceObservation",
     "ImageAnnotation", "ImageFeatures", "ImageProfile", "ImageQuery", "LabelledImage",
-    "LearnedClassifier", "LibraryAnalysisStats", "MediaType", "Saturation",
-    "SpatialRegion", "TAXONOMY_VERSION", "Temperature", "Vibe", "VibeScore",
-    "analyze_folder", "analyze_image", "analyze_library", "analyze_library_stats",
-    "classify", "classify_profile", "collect_confidence_observations",
-    "evaluate_classifier", "evaluate_labels", "extract_features", "feature_vector",
-    "load_annotations", "load_labels", "save_annotation", "score_vibes", "search_cache",
-    "select_vibes",
+    "LearnedClassifier", "LearnedProfileClassifier", "LibraryAnalysisStats", "MediaType",
+    "MultiLabelMetrics", "Saturation", "SpatialRegion", "TAXONOMY_VERSION", "Temperature",
+    "Vibe", "VibeScore", "analyze_folder", "analyze_image", "analyze_library",
+    "analyze_library_stats", "classify", "classify_profile", "collect_confidence_observations",
+    "evaluate_classifier", "evaluate_family", "evaluate_labels", "evaluate_profiles",
+    "extract_features", "feature_vector", "load_annotations", "load_labels", "save_annotation",
+    "score_vibes", "search_cache", "select_vibes",
 ]
