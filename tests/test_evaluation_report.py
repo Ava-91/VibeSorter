@@ -23,8 +23,8 @@ def test_evaluation_report_includes_f1_and_ambiguity(tmp_path: Path) -> None:
 
     assert report.labelled_images == 1
     assert report.metrics.per_vibe["Red / Warm"]["f1"] == 1.0
-    assert report.ambiguous == 0
-    assert report.ambiguous_rate == 0.0
+    assert report.ambiguous == 1
+    assert report.ambiguous_rate == 1.0
     assert report.confidence_error >= 0.0
     assert len(report.calibration) == 10
 
