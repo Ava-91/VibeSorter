@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from vibesorter.features import ColorSample, ImageFeatures
 from vibesorter.profile import AttributeValue, ImageProfile
 from vibesorter.sqlite_cache import SQLiteAnalysisCache
-from vibesorter.features import ColorSample, ImageFeatures
 from vibesorter.vibes import VibeScore
 
 
@@ -40,9 +40,10 @@ def test_profile_round_trips_separately_from_raw_features(tmp_path):
 
 
 def test_profile_requires_existing_image_analysis_record(tmp_path):
-    with SQLiteAnalysisCache(tmp_path / "analysis.db") as cache:
-        with pytest.raises(ValueError, match="before its image analysis record"):
-            cache.set_profile(tmp_path / "missing.jpg", make_profile())
+    with SQLiteAnalysisCache(tmp_path / "analysis.db") as cache, pytest.raises(
+        ValueError, match="before its image analysis record"
+    ):
+        cache.set_profile(tmp_path / "missing.jpg", make_profile())
 
 
 def test_profile_table_is_removed_with_image_record(tmp_path):
