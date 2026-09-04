@@ -28,8 +28,19 @@ def review_folder_plan(
     reject_ids: set[int] | None = None,
 ) -> tuple[FolderDecision, ...]:
     """Turn a dry-run proposal into explicit pending/accepted/rejected decisions."""
-    accepted, rejected = accept_ids or set(), reject_ids or set()
-    return tuple(FolderDecision(op, "rejected" if op.id in rejected else "accepted" if op.id in accepted else "pending") for op in proposal.operations)
+    accepted = accept_ids or set()
+    rejected = reject_ids or set()
+    return tuple(
+        FolderDecision(
+            operation,
+            "rejected"
+            if operation.id in rejected
+            else "accepted"
+            if operation.id in accepted
+            else "pending",
+        )
+        for operation in proposal.operations
+    )
 
 
 def validate_folder_plan(decisions: tuple[FolderDecision, ...]) -> tuple[str, ...]:
@@ -39,7 +50,8 @@ def validate_folder_plan(decisions: tuple[FolderDecision, ...]) -> tuple[str, ..
     for decision in decisions:
         if decision.status != "accepted":
             continue
-        source, destination = Path(decision.operation.source).expanduser(), Path(decision.operation.destination).expanduser()
+        source = Path(decision.operation.source).expanduser()
+        destination = Path(decision.operation.destination).expanduser()
         if not source.is_file():
             blockers.append(f"#{decision.operation.id}: source is missing: {source}")
         key = destination.resolve(strict=False)
@@ -49,7 +61,10 @@ def validate_folder_plan(decisions: tuple[FolderDecision, ...]) -> tuple[str, ..
         if destination.exists():
             blockers.append(f"#{decision.operation.id}: destination already exists: {destination}")
         if decision.operation.confidence < 0.60:
-            blockers.append(f"#{decision.operation.id}: low-confidence classification ({decision.operation.confidence:.0%})")
+            blockers.append(
+                f"#{decision.operation.id}: low-confidence classification "
+                f"({decision.operation.confidence:.0%})"
+            )
     return tuple(blockers)
 
 
@@ -74,26 +89,38 @@ def apply_folder_plan(
             destination = Path(decision.operation.destination).expanduser()
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(destination))
-            applied.append(AppliedMove(decision.operation.id, str(source), str(destination)))
+            applied.append(
+                AppliedMove(decision.operation.id, str(source), str(destination))
+            )
     except OSError:
         rollback_moves(tuple(applied))
         raise
     if journal_path is not None:
-        Path(journal_path).write_text(json.dumps([asdict(item) for item in applied], indent=2) + "\n", encoding="utf-8")
+        Path(journal_path).write_text(
+            json.dumps([asdict(item) for item in applied], indent=2) + "\n",
+            encoding="utf-8",
+        )
     return tuple(applied)
 
 
-def rollback_moves(moves: tuple[AppliedMove, ...], *, confirm: bool = True) -> tuple[AppliedMove, ...]:
+def rollback_moves(
+    moves: tuple[AppliedMove, ...], *, confirm: bool = True
+) -> tuple[AppliedMove, ...]:
     """Restore applied moves in reverse order; never overwrite an existing source."""
     if not confirm:
         raise ValueError("rollback requires explicit confirmation")
     restored: list[AppliedMove] = []
     for move in reversed(moves):
-        source, destination = Path(move.source), Path(move.destination)
+        source = Path(move.source)
+        destination = Path(move.destination)
         if not destination.is_file():
-            raise ValueError(f"cannot rollback #{move.operation_id}: destination is missing")
+            raise ValueError(
+                f"cannot rollback #{move.operation_id}: destination is missing"
+            )
         if source.exists():
-            raise ValueError(f"cannot rollback #{move.operation_id}: original source exists")
+            raise ValueError(
+                f"cannot rollback #{move.operation_id}: original source exists"
+            )
         source.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(destination), str(source))
         restored.append(move)
