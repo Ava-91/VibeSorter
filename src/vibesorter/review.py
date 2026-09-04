@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
 from .proposal import MoveOperation, MoveProposal
 
@@ -114,7 +113,4 @@ def reviewed_from_dict(data: dict) -> tuple[ReviewedOperation, ...]:
     expected_ids = {operation.id for operation in proposal.operations}
     if set(by_id) != expected_ids:
         raise ValueError("review operation IDs must match proposal operation IDs")
-    return tuple(
-        ReviewedOperation(operation, by_id[operation.id])
-        for operation in proposal.operations
-    )
+    return tuple(ReviewedOperation(operation, by_id[operation.id]) for operation in proposal.operations)
