@@ -46,6 +46,8 @@ jobs:
             echo "No Ruff fixes to commit."
           else
             git commit -m "style: apply Ruff autofixes"
+            git fetch origin "${{ github.head_ref }}"
+            git rebase "origin/${{ github.head_ref }}"
             git push origin "HEAD:${{ github.head_ref }}"
           fi
 
