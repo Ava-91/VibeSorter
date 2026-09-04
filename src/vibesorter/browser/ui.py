@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html
-import json
 
 
 FILTER_FAMILIES = ("media_type", "colors", "temperature", "saturation", "brightness", "vibes")
