@@ -120,7 +120,7 @@ def _validate_filters(args, parser):
     if getattr(args, "min_contrast", None) is not None and getattr(args, "max_contrast", None) is not None and args.min_contrast > args.max_contrast: parser.error("--min-contrast cannot exceed --max-contrast")
 
 
-def _analyze_folder(images, workers, *, vibe=None, min_score=0.0, max_text_likelihood=1.0, show_progress=True):
+def _analyze_folder(images, workers, *, vibe=None, min_score=0.0, max_text_likelihood=1.0, show_progress=True, cache=None):
     groups = defaultdict(list); results = []; skipped = 0
     for index, (result, error) in enumerate(_analyze_many(images, workers), start=1):
         path = images[index - 1]
@@ -128,11 +128,15 @@ def _analyze_folder(images, workers, *, vibe=None, min_score=0.0, max_text_likel
             skipped += 1
             if show_progress: print(f"[{index}/{len(images)}] SKIP  {path}: {error}")
             continue
+        if cache is not None:
+            cache.set(path, result.features, result.scores)
         if result.features.text_likelihood > max_text_likelihood: continue
         best = result.best
         if best.score < min_score or (vibe is not None and best.name != vibe): continue
         results.append(result); groups[best.name].append((path, best.score, result.features.text_likelihood))
         if show_progress: print(f"[{index}/{len(images)}] {best.name:<18} {best.score:>5.0%}  {path}")
+    if cache is not None:
+        cache.save()
     return groups, results, skipped
 
 
@@ -181,7 +185,12 @@ def _run_scan(args, parser) -> int:
 
 
 def _run_preview(args, parser) -> int:
-    images = _load_images(args, parser); groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood)
+    images = _load_images(args, parser)
+    cache = AnalysisCache(args.folder.expanduser() / ".vibesorter" / "analysis.db")
+    try:
+        groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, cache=cache)
+    finally:
+        cache.close()
     if args.json: print(json.dumps({"count": len(results), "skipped": skipped, "groups": _json_groups(groups, args.top)}, indent=2, ensure_ascii=False))
     else:
         print(f"\nAnalyzed {len(results)} image(s); skipped {skipped}.")
@@ -192,7 +201,12 @@ def _run_preview(args, parser) -> int:
 
 
 def _run_stats(args, parser) -> int:
-    images = _load_images(args, parser); groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, show_progress=False)
+    images = _load_images(args, parser)
+    cache = AnalysisCache(args.folder.expanduser() / ".vibesorter" / "analysis.db")
+    try:
+        groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, show_progress=False, cache=cache)
+    finally:
+        cache.close()
     payload = {"count": len(results), "skipped": skipped, "groups": _json_groups(groups)}
     if args.json: print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
@@ -223,7 +237,13 @@ def _run_duplicates(args, parser) -> int:
 
 
 def _run_propose(args, parser) -> int:
-    images = _load_images(args, parser); _, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood); proposal = build_proposal(results, args.output_root)
+    images = _load_images(args, parser)
+    cache = AnalysisCache(args.folder.expanduser() / ".vibesorter" / "analysis.db")
+    try:
+        _, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, cache=cache)
+    finally:
+        cache.close()
+    proposal = build_proposal(results, args.output_root)
     if args.output is not None: args.output.write_text(proposal_to_json(proposal), encoding="utf-8"); print(f"Wrote proposal: {args.output}")
     elif args.json: print(json.dumps(proposal_to_dict(proposal), indent=2, ensure_ascii=False))
     else: print(f"Proposed {len(proposal.operations)} move(s); skipped {skipped} image(s).")
