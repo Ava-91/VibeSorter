@@ -78,7 +78,7 @@ def _metrics(labels: tuple[LabelledImage, ...], predictor) -> ClassificationMetr
 
 def evaluate_labels(labels: tuple[LabelledImage, ...]) -> ClassificationMetrics:
     """Evaluate the deterministic heuristic classifier against human labels."""
-    return _metrics(labels, lambda item: classify(extract_features(item.path)))
+    return _metrics(labels, lambda path: classify(extract_features(path)))
 
 
 def evaluate_classifier(labels: tuple[LabelledImage, ...], classifier) -> ClassificationMetrics:
