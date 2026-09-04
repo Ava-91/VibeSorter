@@ -34,12 +34,16 @@ def test_learned_profile_model_trains_per_family(tmp_path):
     # using a real lightweight feature object through the model's feature path.
     from vibesorter import learned_profile
     original = learned_profile.extract_features
-    learned_profile.extract_features = lambda _: ImageFeatures(
-        path=image, average_rgb=(120, 40, 40), average_hsv=(0.0, 0.6, 0.5),
-        brightness=0.5, saturation=0.6, contrast=0.2, warm_ratio=0.4, cool_ratio=0.1,
-        grayscale_ratio=0.1, dark_ratio=0.2, light_ratio=0.1, text_likelihood=0.1,
-        colors=(ColorSample((120, 40, 40), 1.0),),
-    )
+
+    def fake_extract_features(_):
+        return ImageFeatures(
+            path=image, average_rgb=(120, 40, 40), average_hsv=(0.0, 0.6, 0.5),
+            brightness=0.5, saturation=0.6, contrast=0.2, warm_ratio=0.4, cool_ratio=0.1,
+            grayscale_ratio=0.1, dark_ratio=0.2, light_ratio=0.1, text_likelihood=0.1,
+            colors=(ColorSample((120, 40, 40), 1.0),),
+        )
+
+    learned_profile.extract_features = fake_extract_features
     try:
         model = LearnedProfileClassifier.fit((annotation,))
         assert set(model.centroids) == {"media_type", "colors", "temperature", "saturation", "brightness", "vibes"}
