@@ -4,7 +4,12 @@ from PIL import Image
 
 from vibesorter.pipeline import analyze_image
 from vibesorter.proposal import build_proposal
-from vibesorter.review import parse_selection, review_proposal
+from vibesorter.review import (
+    parse_selection,
+    review_proposal,
+    reviewed_from_dict,
+    reviewed_to_dict,
+)
 
 
 def make_image(path: Path):
@@ -33,3 +38,19 @@ def test_rejected_operation_wins_over_vibe_acceptance(tmp_path):
     vibe = proposal.operations[0].vibe
     reviewed = review_proposal(proposal, accept_vibes={vibe}, reject_ids={1})
     assert reviewed[0].status == "rejected"
+
+
+def test_reviewed_proposal_round_trips_with_metadata(tmp_path):
+    path = tmp_path / "image.jpg"
+    make_image(path)
+    proposal = build_proposal([analyze_image(path)], tmp_path / "Sorted")
+    reviewed = review_proposal(proposal, accept_ids={1})
+    data = reviewed_to_dict(proposal, reviewed)
+
+    restored = reviewed_from_dict(data)
+
+    assert data["version"] == proposal.version
+    assert data["output_root"] == proposal.output_root
+    assert data["review"] == [{"id": 1, "status": "accepted"}]
+    assert restored[0].operation == proposal.operations[0]
+    assert restored[0].status == "accepted"
