@@ -10,7 +10,7 @@ def test_search_command_parses_filters() -> None:
         "search",
         "photos",
         "--vibe",
-        "Retro Blue",
+        "retro",
         "--min-score",
         "0.75",
         "--path",
@@ -26,7 +26,7 @@ def test_search_command_parses_filters() -> None:
 
     assert args.command == "search"
     assert args.folder == Path("photos")
-    assert args.vibe == "Retro Blue"
+    assert args.vibe == "retro"
     assert args.min_score == 0.75
     assert args.path_contains == "billie"
     assert args.min_brightness == 0.4
