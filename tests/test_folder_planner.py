@@ -49,7 +49,8 @@ def test_planner_uses_one_primary_folder_and_keeps_multilabel_metadata(
         tmp_path / "Sorted",
     )
     assert proposal.version == 2
-    assert proposal.operations[0].destination.endswith("Sorted/photograph/a.jpg")
+    destination = Path(proposal.operations[0].destination)
+    assert destination.relative_to(tmp_path / "Sorted") == Path("photograph/a.jpg")
 
 
 def test_planner_can_choose_color_as_primary_attribute(tmp_path: Path) -> None:
@@ -61,7 +62,8 @@ def test_planner_can_choose_color_as_primary_attribute(tmp_path: Path) -> None:
         tmp_path / "Sorted",
         primary_attribute="colors",
     )
-    assert proposal.operations[0].destination.endswith("Sorted/red/a.jpg")
+    destination = Path(proposal.operations[0].destination)
+    assert destination.relative_to(tmp_path / "Sorted") == Path("red/a.jpg")
 
 
 def test_planner_resolves_filename_collisions_deterministically(tmp_path: Path) -> None:
@@ -77,9 +79,10 @@ def test_planner_resolves_filename_collisions_deterministically(tmp_path: Path) 
         second: profile("photograph", ("red",), ("moody",)),
     }
     proposal = build_attribute_proposal(results, profiles, tmp_path / "Sorted")
-    destinations = [item.destination for item in proposal.operations]
-    assert destinations[0].endswith("Sorted/photograph/a.jpg")
-    assert destinations[1].endswith("Sorted/photograph/a (2).jpg")
+    destinations = [Path(item.destination) for item in proposal.operations]
+    root = tmp_path / "Sorted"
+    assert destinations[0].relative_to(root) == Path("photograph/a.jpg")
+    assert destinations[1].relative_to(root) == Path("photograph/a (2).jpg")
 
 
 def test_planner_rejects_unknown_attribute(tmp_path: Path) -> None:
