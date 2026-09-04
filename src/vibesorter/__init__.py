@@ -27,7 +27,6 @@ from .taxonomy import (
     Temperature,
     Vibe,
 )
-from .search import ImageQuery, search_cache
 from .vibes import VIBES, VibeScore, classify, score_vibes, select_vibes
 
 __all__ = [
