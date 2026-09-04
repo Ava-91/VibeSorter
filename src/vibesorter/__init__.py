@@ -17,8 +17,8 @@ from .pipeline import AnalysisResult, analyze_folder, analyze_image
 from .profile import AttributeValue, ImageProfile
 from .search import ImageQuery, search_cache
 from .taxonomy import (
-    ATTRIBUTE_CARDINALITY, ATTRIBUTE_FAMILIES, TAXONOMY_VERSION,
-    Brightness, Color, MediaType, Saturation, Temperature, Vibe,
+    ATTRIBUTE_CARDINALITY, ATTRIBUTE_FAMILIES, Brightness, Color, MediaType,
+    Saturation, TAXONOMY_VERSION, Temperature, Vibe,
 )
 from .vibes import VIBES, VibeScore, classify, score_vibes, select_vibes
 
