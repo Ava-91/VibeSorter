@@ -19,10 +19,10 @@ def test_evaluation_report_includes_f1_and_ambiguity(tmp_path: Path) -> None:
     image = tmp_path / "red.png"
     Image.new("RGB", (20, 20), (230, 20, 20)).save(image)
 
-    report = evaluate_dataset((LabelledImage(image, "moody"),))
+    report = evaluate_dataset((LabelledImage(image, "cozy"),))
 
     assert report.labelled_images == 1
-    assert report.metrics.per_vibe["moody"]["f1"] == 1.0
+    assert report.metrics.per_vibe["cozy"]["f1"] == 1.0
     assert report.ambiguous == 1
     assert report.ambiguous_rate == 1.0
     assert report.confidence_error >= 0.0
@@ -33,7 +33,7 @@ def test_zero_support_vibe_metrics_are_zero(tmp_path: Path) -> None:
     image = tmp_path / "red.png"
     Image.new("RGB", (20, 20), (230, 20, 20)).save(image)
 
-    report = evaluate_dataset((LabelledImage(image, "moody"),))
+    report = evaluate_dataset((LabelledImage(image, "cozy"),))
     metrics = report.metrics.per_vibe["soft"]
 
     assert metrics["support"] == 0
