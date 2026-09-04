@@ -7,9 +7,9 @@ from pathlib import Path
 
 from .annotation import ImageAnnotation
 from .features import ImageFeatures, extract_features
+from .learned import feature_vector
 from .profile import AttributeValue, ImageProfile
 from .taxonomy import ATTRIBUTE_FAMILIES
-from .learned import feature_vector
 
 MODEL_VERSION = 2
 MULTI_FAMILY = {"colors", "vibes"}

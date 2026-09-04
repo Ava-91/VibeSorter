@@ -15,7 +15,8 @@ def _confidence(value: float) -> float:
 
 def _color_values(features: ImageFeatures) -> tuple[AttributeValue, ...]:
     candidates: list[AttributeValue] = []
-    for rgb, proportion in features.colors:
+    for sample in features.colors:
+        rgb, proportion = sample.rgb, sample.proportion
         r, g, b = (component / 255 for component in rgb)
         maximum = max(r, g, b)
         minimum = min(r, g, b)
