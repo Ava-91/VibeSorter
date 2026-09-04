@@ -24,7 +24,7 @@ def test_exact_duplicates_group_identical_bytes(tmp_path: Path) -> None:
     groups = find_exact_duplicates([first, second])
 
     assert len(groups) == 1
-    assert sorted(groups.values())[0] == [first, second]
+    assert min(groups.values()) == [first, second]
 
 
 def test_near_duplicates_find_similar_but_not_identical_images(tmp_path: Path) -> None:
