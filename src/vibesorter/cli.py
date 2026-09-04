@@ -112,7 +112,8 @@ Read-only commands never modify your images. Filesystem changes require explicit
 
 def _analyze_one(path: Path):
     try: return analyze_image(path), None
-    except Exception as exc: return None, exc
+    except Exception as exc:  # noqa: BLE001
+        return None, exc
 
 
 def _analyze_many(images: list[Path], workers: int):
@@ -184,108 +185,111 @@ def _run_review(args, parser):
         accepted = parse_selection(args.accept, len(proposal.operations)); rejected = parse_selection(args.reject, len(proposal.operations))
     except ValueError as exc: parser.error(str(exc))
     reviewed = review_proposal(proposal, accept_ids=accepted, reject_ids=rejected, accept_vibes=set(args.accept_vibe), reject_vibes=set(args.reject_vibe))
-    output = {**proposal_to_dict(proposal), "review": [{"id": item.operation.id, "status": item.status} for item in reviewed]}
-    if args.output: args.output.expanduser().write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"); print(f"Reviewed proposal written to {args.output.expanduser()}")
-    elif args.json: print(json.dumps(output, indent=2, ensure_ascii=False))
-    else:
-        print(f"Review: {len(reviewed)} operation(s)\n")
-        for item in reviewed: print(f"[{item.operation.id:>4}] {item.status:<8} {item.operation.vibe:<18} {item.operation.source} -> {item.operation.destination}")
-        print("\nReview only: no files were created, moved, copied, renamed, deleted, or modified.")
+    output = args.output or args.proposal.with_name(f"{args.proposal.stem}-reviewed.json")
+    output.write_text(proposal_to_json(reviewed), encoding="utf-8")
+    if args.json: print(proposal_to_json(reviewed))
+    else: print(f"Wrote reviewed proposal: {output}")
     return 0
 
 
-def _load_reviewed(path: Path, parser) -> tuple[ReviewedOperation, ...]:
-    try: data = json.loads(path.expanduser().read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc: parser.error(f"invalid reviewed proposal: {exc}")
-    try:
-        proposal = proposal_from_dict(data)
-        statuses = {int(item["id"]): item["status"] for item in data.get("review", [])}
-        if set(statuses) != {operation.id for operation in proposal.operations}: raise ValueError("reviewed proposal must contain one status for every operation")
-        if any(status not in {"accepted", "rejected", "pending"} for status in statuses.values()): raise ValueError("invalid review status")
-        return tuple(ReviewedOperation(operation, statuses[operation.id]) for operation in proposal.operations)
-    except (KeyError, TypeError, ValueError) as exc: parser.error(f"invalid reviewed proposal: {exc}")
-
-
-def _run_apply(args, parser):
-    if not args.confirm and not args.dry_run: parser.error("refusing to change files without --confirm (use --dry-run to preview)")
-    reviewed = _load_reviewed(args.reviewed, parser)
-    results = apply_reviewed(reviewed, confirm=args.confirm, dry_run=args.dry_run)
-    if args.confirm and not args.dry_run:
-        batch_id = uuid4().hex[:12]; recorded = record_batch(batch_id, results, args.history)
-    else: recorded = 0; batch_id = None
-    if args.json:
-        print(json.dumps({"batch_id": batch_id, "recorded": recorded, "results": [{"id": r.operation_id, "status": r.status, "source": str(r.source), "destination": str(r.destination), "detail": r.detail} for r in results]}, indent=2, ensure_ascii=False))
-    else:
-        for result in results: print(f"[{result.operation_id:>4}] {result.status:<8} {result.source} -> {result.destination}" + (f" ({result.detail})" if result.detail else ""))
-        moved = sum(result.status == "moved" for result in results); print(f"\n{moved} file(s) moved; conflicts and missing sources were never overwritten.")
-        if batch_id: print(f"Batch: {batch_id}\nHistory: {args.history.expanduser()}")
+def _run_gallery(args, parser) -> int:
+    try: output = gallery_from_file(args.proposal, args.output)
+    except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc: parser.error(f"invalid gallery source: {exc}")
+    print(f"Wrote gallery: {output}")
     return 0
 
 
-def _run_rollback(args, parser):
-    if not args.confirm and not args.dry_run: parser.error("refusing to change files without --confirm (use --dry-run to preview)")
-    try: results = rollback_batch(args.history, args.batch_id, confirm=args.confirm, dry_run=args.dry_run)
-    except (OSError, ValueError, json.JSONDecodeError) as exc: parser.error(str(exc))
-    if args.json: print(json.dumps(results, indent=2, ensure_ascii=False))
-    else:
-        for result in results: print(f"[{result['operation_id']:>4}] {result['status']:<9} {result['destination']} -> {result['source']} ({result['detail']})")
-        print(f"\nRollback check complete for batch {args.batch_id}.")
-    return 0
-
-
-def _run_history(args):
-    records = list_history(args.history)
-    if args.json: print(json.dumps(records, indent=2, ensure_ascii=False)); return 0
-    if not records: print(f"No history recorded in {args.history}"); return 0
-    for item in records: print(f"{item.get('timestamp','')}  {item.get('batch_id','')}  op {item.get('operation_id','?')}  {item.get('source','')} -> {item.get('destination','')}")
-    return 0
-
-
-def main() -> int:
-    parser = build_parser(); args = parser.parse_args()
-    if args.command == "search": _validate_filters(args, parser); return _run_search(args, parser)
-    if args.command == "review": return _run_review(args, parser)
-    if args.command == "gallery":
-        try: output = gallery_from_file(args.proposal, args.output)
-        except (OSError, json.JSONDecodeError, ValueError) as exc: parser.error(f"invalid gallery source: {exc}")
-        print(f"Gallery written to {output}"); return 0
-    if args.command == "apply": return _run_apply(args, parser)
-    if args.command == "rollback": return _run_rollback(args, parser)
-    if args.command == "history": return _run_history(args)
-    if args.command == "analyze":
-        result, error = _analyze_one(args.image.expanduser())
-        if error is not None: parser.error(str(error))
-        if args.json: print(json.dumps({"path": str(result.path), "best": {"name": result.best.name, "score": result.best.score}, "confidence": confidence_score(result.scores), "text_likelihood": result.features.text_likelihood, "ranking": [{"name": s.name, "score": s.score} for s in result.scores]}, indent=2))
-        else: print(f"Image: {result.path}\nBest vibe: {result.best.name} ({result.best.score:.0%})\nConfidence: {confidence_score(result.scores):.0%}\nText/screenshot likelihood: {result.features.text_likelihood:.0%}\n\nVibe ranking:"); [print(f"  {s.name:<18} {s.score:.0%}") for s in result.scores]
-        return 0
+def _run_scan(args, parser) -> int:
     images = _load_images(args, parser)
-    if args.command == "scan": print(f"Found {len(images)} image(s) in {args.folder.expanduser()}"); [print(image) for image in images]; return 0
-    _validate_filters(args, parser)
-    if args.command == "duplicates":
-        exact = find_exact_duplicates(images); near = find_near_duplicates(images, max_distance=args.max_distance)
-        if args.json: print(json.dumps({"total": len(images), "exact_duplicates": [{"hash": d, "paths": [str(p) for p in ps]} for d, ps in exact.items()], "near_duplicates": [{"left": str(l), "right": str(r), "distance": d} for l, r, d in near]}, indent=2)); return 0
-        print(f"Scanned {len(images)} image(s) for duplicates.\n\n=== Exact duplicate groups: {len(exact)} ===")
-        for paths in exact.values(): print("\n".join(f"  {path}" for path in paths), "")
-        print(f"=== Near-duplicate pairs (distance <= {args.max_distance}): {len(near)} ==="); [print(f"  {d:>2}  {l}  <->  {r}") for l, r, d in near]; print("\nNo files were created, moved, copied, renamed, deleted, or modified."); return 0
-    groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, show_progress=not args.json and args.command != "propose")
-    if args.command == "propose":
-        proposal = build_proposal(results, args.output_root); data = proposal_to_json(proposal)
-        if args.output: args.output.expanduser().write_text(data, encoding="utf-8"); print(f"Proposal written to {args.output.expanduser()}")
-        elif args.json: print(data, end="")
-        else:
-            print(f"Proposed organization: {len(proposal.operations)} image(s) -> {proposal.output_root}\n")
-            for op in proposal.operations: print(f"[{op.id:>4}] {op.vibe:<18} {op.score:>5.0%}  {op.source}\n       -> {op.destination}")
-            print("\nRead-only proposal: no files were created, moved, copied, renamed, deleted, or modified.")
-        return 0
-    if args.command == "stats":
-        if args.json: print(json.dumps({"total": len(images), "analyzed": len(images)-skipped, "skipped": skipped, "vibes": _json_groups(groups)}, indent=2)); return 0
-        print(f"Analyzing {len(images)} image(s) for vibe statistics...\n\n=== Vibe statistics ==="); [print(f"{n:<18} {len(i):>5} image(s)  avg confidence {sum(s for _,s,_ in i)/len(i):.0%}") for n,i in sorted(groups.items(), key=lambda x:(-len(x[1]),x[0]))]; print(f"\nTotal: {len(images)-skipped} analyzed, {skipped} skipped."); return 0
-    if args.json: print(json.dumps({"total": len(images), "analyzed": len(images)-skipped, "skipped": skipped, "vibes": _json_groups(groups, args.top)}, indent=2, ensure_ascii=False)); return 0
-    print(f"Analyzing {len(images)} image(s) locally in {args.folder.expanduser()}\n\n=== Proposed vibe folders ===")
-    for name, items in sorted(groups.items(), key=lambda x:(-len(x[1]),x[0])):
-        print(f"\n{name} — {len(items)} image(s)"); [print(f"  {s:>5.0%}  {p}") for p,s,_ in items[:args.top]]
-        if len(items) > args.top: print(f"  ... and {len(items)-args.top} more")
-    print(f"\nAnalysis complete — {len(images)-skipped} analyzed, {skipped} skipped.\nNo files were created, moved, copied, or modified."); return 0
+    for path in images: print(path)
+    print(f"\nFound {len(images)} image(s).")
+    return 0
 
 
-if __name__ == "__main__": raise SystemExit(main())
+def _run_preview(args, parser) -> int:
+    images = _load_images(args, parser)
+    groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood)
+    if args.json:
+        print(json.dumps({"count": len(results), "skipped": skipped, "groups": _json_groups(groups, args.top)}, indent=2, ensure_ascii=False))
+    else:
+        print(f"\nAnalyzed {len(results)} image(s); skipped {skipped}.")
+        for name, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+            print(f"\n{name}: {len(items)}")
+            for path, score, _ in items[:args.top]: print(f"  {score:>5.0%}  {path}")
+    return 0
+
+
+def _run_stats(args, parser) -> int:
+    images = _load_images(args, parser)
+    groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, show_progress=False)
+    payload = {"count": len(results), "skipped": skipped, "groups": _json_groups(groups)}
+    if args.json: print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        print(f"Analyzed {len(results)} image(s); skipped {skipped}.")
+        for name, info in payload["groups"].items(): print(f"{name:<18} {info['count']:>5}  avg {info['average_score']:.0%}")
+    return 0
+
+
+def _run_analyze(args, parser) -> int:
+    try: result = analyze_image(args.image)
+    except (OSError, ValueError, TypeError) as exc: parser.error(str(exc))
+    payload = {"path": str(result.path), "best": {"name": result.best.name, "score": round(result.best.score, 4)}, "text_likelihood": round(result.features.text_likelihood, 4), "scores": [{"name": score.name, "score": round(score.score, 4)} for score in result.scores]}
+    if args.json: print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        print(f"Best vibe: {result.best.name} ({result.best.score:.0%})")
+        print(f"Text/screenshot likelihood: {result.features.text_likelihood:.0%}")
+        print("\nRanking:")
+        for score in result.scores: print(f"  {score.name:<20} {score.score:.0%}")
+    return 0
+
+
+def _run_duplicates(args, parser) -> int:
+    images = _load_images(args, parser)
+    exact = find_exact_duplicates(images); near = find_near_duplicates(images, max_distance=args.max_distance)
+    payload = {"exact": [{"paths": [str(path) for path in group]} for group in exact.values()], "near": [{"left": str(left), "right": str(right), "distance": distance} for left, right, distance in near]}
+    if args.json: print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        print(f"Exact duplicate groups: {len(exact)}")
+        for group in exact.values(): print("  " + " = ".join(map(str, group)))
+        print(f"Near duplicate pairs: {len(near)}")
+        for left, right, distance in near: print(f"  {distance:>3}  {left} ~= {right}")
+    return 0
+
+
+def _run_propose(args, parser) -> int:
+    images = _load_images(args, parser)
+    _, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood)
+    proposal = build_proposal(results, args.output_root)
+    if args.output is not None: args.output.write_text(proposal_to_json(proposal), encoding="utf-8"); print(f"Wrote proposal: {args.output}")
+    elif args.json: print(json.dumps(proposal_to_dict(proposal), indent=2, ensure_ascii=False))
+    else: print(f"Proposed {len(proposal.operations)} move(s); skipped {skipped} image(s).")
+    return 0
+
+
+def _run_apply(args, parser) -> int:
+    if not args.confirm and not args.dry_run: parser.error("apply requires --confirm or --dry-run")
+    try: data = json.loads(args.reviewed.expanduser().read_text(encoding="utf-8")); proposal = proposal_from_dict(data)
+    except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc: parser.error(f"invalid reviewed proposal: {exc}")
+    accepted = [ReviewedOperation(item.id, item.source, item.destination, item.status) for item in proposal.operations if item.status == "accepted"]
+    results = apply_reviewed(accepted, confirm=args.confirm and not args.dry_run)
+    if args.confirm and not args.dry_run: record_batch(args.history, str(uuid4()), results)
+    if args.json: print(json.dumps(results, indent=2, ensure_ascii=False))
+    else: print(f"Applied {len(results)} operation(s).")
+    return 0
+
+
+def _run_rollback(args, parser) -> int:
+    if not args.confirm and not args.dry_run: parser.error("rollback requires --confirm or --dry-run")
+    try: results = rollback_batch(args.history, args.batch_id, confirm=args.confirm and not args.dry_run)
+    except (OSError, ValueError) as exc: parser.error(str(exc))
+    if args.json: print(json.dumps(results, indent=2, ensure_ascii=False))
+    else: print(f"Rolled back {len(results)} operation(s).")
+    return 0
+
+
+def _run_history(args) -> int:
+    entries = list_history(args.history)
+    if args.json: print(json.dumps(entries, indent=2, ensure_ascii=False))
+    else:
+        for entry in entries: print(json.dumps(entry, ensure_ascii=False))
+    return 0
