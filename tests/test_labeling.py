@@ -16,8 +16,19 @@ from vibesorter.labeling import (
 from vibesorter.vibes import VibeScore
 
 
-def _candidate(path: Path, prediction: str = "Retro Blue", confidence: float = 0.43, ambiguous: bool = True) -> LabelCandidate:
-    return LabelCandidate(path.resolve(), prediction, confidence, ambiguous, (VibeScore(prediction, 0.48), VibeScore("Soft / Pastel", 0.40)))
+def _candidate(
+    path: Path,
+    prediction: str = "retro",
+    confidence: float = 0.43,
+    ambiguous: bool = True,
+) -> LabelCandidate:
+    return LabelCandidate(
+        path.resolve(),
+        prediction,
+        confidence,
+        ambiguous,
+        (VibeScore(prediction, 0.48), VibeScore("soft", 0.40)),
+    )
 
 
 def test_build_candidates_prioritizes_ambiguous_then_confidence(tmp_path):
@@ -28,9 +39,9 @@ def test_build_candidates_prioritizes_ambiguous_then_confidence(tmp_path):
     with sqlite3.connect(db) as conn:
         conn.execute("CREATE TABLE images(path TEXT PRIMARY KEY, size INTEGER, mtime_ns INTEGER, features TEXT, scores TEXT)")
         rows = [
-            (str(paths[0]), 1, 1, "{}", json.dumps([{"name": "Retro Blue", "score": 0.70}, {"name": "Dark / Moody", "score": 0.20}])),
-            (str(paths[1]), 1, 1, "{}", json.dumps([{"name": "Retro Blue", "score": 0.50}, {"name": "Soft / Pastel", "score": 0.49}])),
-            (str(paths[2]), 1, 1, "{}", json.dumps([{"name": "Dark / Moody", "score": 0.60}, {"name": "Green & Black", "score": 0.59}])),
+            (str(paths[0]), 1, 1, "{}", json.dumps([{"name": "retro", "score": 0.70}, {"name": "moody", "score": 0.20}])),
+            (str(paths[1]), 1, 1, "{}", json.dumps([{"name": "retro", "score": 0.50}, {"name": "soft", "score": 0.49}])),
+            (str(paths[2]), 1, 1, "{}", json.dumps([{"name": "moody", "score": 0.60}, {"name": "edgy", "score": 0.59}])),
         ]
         conn.executemany("INSERT INTO images VALUES (?,?,?,?,?)", rows)
     candidates = build_candidates(db, root, count=3, uncertain_first=True)
@@ -42,14 +53,14 @@ def test_label_session_accepts_sample_labels_template(tmp_path):
     paths = [tmp_path / "a.jpg", tmp_path / "b.jpg"]
     write_label_template(paths, output)
     first = _candidate(paths[0])
-    second = _candidate(paths[1], "Dark / Moody", 0.31)
+    second = _candidate(paths[1], "moody", 0.31)
     session = LabelSession((first, second), output)
     assert session.labelled == 0
     assert session.remaining == (first, second)
     session.decide(first, first.prediction)
     records = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
     assert len(records) == 1
-    assert records[0]["label"] == "Retro Blue"
+    assert records[0]["label"] == "retro"
 
 
 def test_load_completed_labels_still_rejects_unknown_nonempty_label(tmp_path):
@@ -61,20 +72,20 @@ def test_load_completed_labels_still_rejects_unknown_nonempty_label(tmp_path):
 
 def test_label_session_persists_and_resumes(tmp_path):
     first = _candidate(tmp_path / "a.jpg")
-    second = _candidate(tmp_path / "b.jpg", "Dark / Moody", 0.31)
+    second = _candidate(tmp_path / "b.jpg", "moody", 0.31)
     output = tmp_path / "labels.jsonl"
     session = LabelSession((first, second), output)
     session.decide(first, first.prediction)
     assert session.labelled == 1
     assert len(session.remaining) == 1
-    assert load_completed_labels(output)[str(first.path)] == "Retro Blue"
+    assert load_completed_labels(output)[str(first.path)] == "retro"
 
     resumed = LabelSession((first, second), output)
     assert len(resumed.remaining) == 1
-    resumed.decide(second, "Dark / Moody")
+    resumed.decide(second, "moody")
     records = output.read_text(encoding="utf-8").splitlines()
     assert len(records) == 2
-    assert {json.loads(line)["label"] for line in records} == {"Retro Blue", "Dark / Moody"}
+    assert {json.loads(line)["label"] for line in records} == {"retro", "moody"}
 
 
 def test_save_label_rejects_unknown_vibe(tmp_path):
@@ -88,5 +99,5 @@ def test_label_page_contains_local_review_controls(tmp_path):
     page = render_label_page(session)
     assert "Assisted labeling" in page
     assert "/api/label/decision" in page
-    assert "Enter" in page and "1–8" in page and "Skip" in page and "Undo" in page
+    assert "Enter" in page and "1–10" in page and "Skip" in page and "Undo" in page
     assert json.dumps(str((tmp_path / "a.jpg").resolve())) in page
