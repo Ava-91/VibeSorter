@@ -132,18 +132,28 @@ def test_browser_image_path_only_serves_cached_existing_files(tmp_path: Path):
 def test_browser_renders_empty_state():
     page = render_page([])
     assert "No cached analysis matched" in page
-    assert "no cloud upload" in page
+    assert "cached analysis only" in page
+    assert "multidimensional filters" in page
 
 
 def test_browser_renders_lazy_image_grid():
     page = render_page()
     assert "loading='lazy'" in page
     assert "api/images" in page
-    assert "load-more" in page
-    assert "api/vibes" in page
+    assert "id='more'" in page
+    assert "Load more" in page
+    assert "api/attributes" in page
+    assert "media_type" in page
+    assert "colors" in page
+    assert "temperature" in page
+    assert "saturation" in page
+    assert "brightness" in page
+    assert "vibes" in page
 
 
 def test_browser_renders_image_detail_template_without_unescaped_fstring_braces():
     page = render_page()
-    assert "alt='${escapeHtml(data.vibe||'Image')}'" in page
-    assert "api/image-details?path=${encodeURIComponent(path)}" in page
+    assert "const esc=v=>" in page
+    assert "api/image-details?path=" in page
+    assert "encodeURIComponent(path)" in page
+    assert "${esc(d.vibe||'Unclassified')}" in page
