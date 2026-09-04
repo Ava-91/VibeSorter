@@ -302,3 +302,43 @@ def _run_history(args) -> int:
     else:
         for entry in entries: print(json.dumps(entry, ensure_ascii=False))
     return 0
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.command == "scan":
+        return _run_scan(args, parser)
+    if args.command == "preview":
+        _validate_filters(args, parser)
+        return _run_preview(args, parser)
+    if args.command == "stats":
+        _validate_filters(args, parser)
+        return _run_stats(args, parser)
+    if args.command == "search":
+        _validate_filters(args, parser)
+        return _run_search(args, parser)
+    if args.command == "duplicates":
+        _validate_filters(args, parser)
+        return _run_duplicates(args, parser)
+    if args.command == "propose":
+        _validate_filters(args, parser)
+        return _run_propose(args, parser)
+    if args.command == "review":
+        return _run_review(args, parser)
+    if args.command == "gallery":
+        return _run_gallery(args, parser)
+    if args.command == "apply":
+        return _run_apply(args, parser)
+    if args.command == "rollback":
+        return _run_rollback(args, parser)
+    if args.command == "history":
+        return _run_history(args)
+    if args.command == "analyze":
+        return _run_analyze(args, parser)
+    parser.error(f"unknown command: {args.command}")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
