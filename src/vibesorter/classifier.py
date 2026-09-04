@@ -38,7 +38,9 @@ def _color_values(features: ImageFeatures) -> tuple[AttributeValue, ...]:
             best[candidate.value] = candidate
     selected = [item for item in best.values() if item.confidence >= 0.12]
     selected.sort(key=lambda item: item.confidence, reverse=True)
-    return tuple(selected[:3]) or (AttributeValue("neutral", _confidence(features.grayscale_ratio), "heuristic"),)
+    return tuple(selected[:3]) or (
+        AttributeValue("neutral", _confidence(features.grayscale_ratio), "heuristic"),
+    )
 
 
 def _media_type(features: ImageFeatures) -> AttributeValue:
@@ -49,8 +51,6 @@ def _media_type(features: ImageFeatures) -> AttributeValue:
         return AttributeValue("screenshot", _confidence(0.65 + 0.35 * text), "heuristic")
     if text >= 0.70:
         return AttributeValue("graphic", _confidence(0.55 + 0.35 * text), "heuristic")
-    # Without a visual model, photography is the conservative default for
-    # natural-image inputs; the confidence reflects the ambiguity.
     confidence = _clamp(0.55 + 0.25 * (1 - text) + 0.20 * (1 - contrast))
     return AttributeValue("photograph", _confidence(confidence), "heuristic")
 
@@ -58,7 +58,9 @@ def _media_type(features: ImageFeatures) -> AttributeValue:
 def _temperature(features: ImageFeatures) -> AttributeValue:
     warm, cool = features.warm_ratio, features.cool_ratio
     if abs(warm - cool) < 0.08:
-        return AttributeValue("neutral", _confidence(0.60 + 0.30 * (1 - abs(warm - cool) / 0.08)), "heuristic")
+        return AttributeValue(
+            "neutral", _confidence(0.60 + 0.30 * (1 - abs(warm - cool) / 0.08)), "heuristic"
+        )
     value = "warm" if warm > cool else "cool"
     confidence = 0.55 + 0.45 * _clamp(abs(warm - cool) / 0.6)
     return AttributeValue(value, _confidence(confidence), "heuristic")
@@ -85,21 +87,15 @@ def _brightness(features: ImageFeatures) -> AttributeValue:
 
 
 def _vibes(features: ImageFeatures) -> tuple[AttributeValue, ...]:
-    mapping = {
-        "Retro Blue": "retro",
-        "Soft / Pastel": "soft",
-        "Dark / Moody": "moody",
-        "Bright / Colorful": "playful",
-    }
     scores = score_vibes(features)
-    selected: list[AttributeValue] = []
-    winner = scores[0].score if scores else 0.0
-    for score in scores:
-        value = mapping.get(score.name)
-        if value is None or score.score < 0.45 or winner - score.score > 0.15:
-            continue
-        selected.append(AttributeValue(value, score.score, "legacy-heuristic"))
-    return tuple(selected)
+    if not scores:
+        return ()
+    winner = scores[0].score
+    return tuple(
+        AttributeValue(score.name, score.score, "heuristic")
+        for score in scores
+        if score.score >= 0.45 and winner - score.score <= 0.15
+    )
 
 
 def classify_profile(features: ImageFeatures) -> ImageProfile:
