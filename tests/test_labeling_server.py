@@ -13,20 +13,20 @@ def test_label_page_renders_without_python_fstring_syntax_errors(tmp_path):
     image = tmp_path / "image.jpg"
     candidate = LabelCandidate(
         image.resolve(),
-        "Retro Blue",
+        "retro",
         0.43,
         True,
-        (VibeScore("Retro Blue", 0.48), VibeScore("Soft / Pastel", 0.40)),
+        (VibeScore("retro", 0.48), VibeScore("soft", 0.40)),
     )
     page = render_label_page(LabelSession((candidate,), tmp_path / "labels.jsonl"))
     assert "Assisted labeling" in page
-    assert "Retro Blue" in page
-    assert "Neutral / Photo Dump" in page
+    assert "retro" in page
+    assert "romantic" in page
     assert "__PAYLOAD__" not in page
     assert "__VIBE_BUTTONS__" not in page
     assert "function decide(label,skip=false)" in page
-    assert "1–8" in page
-    assert '"8": "Neutral / Photo Dump"' in page
+    assert "1–10" in page
+    assert '"10": "romantic"' in page
 
 
 def test_label_decision_endpoint_persists_human_label(tmp_path):
@@ -34,10 +34,10 @@ def test_label_decision_endpoint_persists_human_label(tmp_path):
     image.write_bytes(b"not-used-by-endpoint")
     candidate = LabelCandidate(
         image.resolve(),
-        "Retro Blue",
+        "retro",
         0.43,
         True,
-        (VibeScore("Retro Blue", 0.48), VibeScore("Soft / Pastel", 0.40)),
+        (VibeScore("retro", 0.48), VibeScore("soft", 0.40)),
     )
     output = tmp_path / "labels.jsonl"
     session = LabelSession((candidate,), output)
@@ -46,12 +46,12 @@ def test_label_decision_endpoint_persists_human_label(tmp_path):
     thread.start()
     try:
         connection = HTTPConnection("127.0.0.1", server.server_port)
-        connection.request("POST", "/api/label/decision", body=json.dumps({"path": str(image), "label": "Dark / Moody"}), headers={"Content-Type": "application/json"})
+        connection.request("POST", "/api/label/decision", body=json.dumps({"path": str(image), "label": "moody"}), headers={"Content-Type": "application/json"})
         response = connection.getresponse()
         body = json.loads(response.read())
         assert response.status == 200
         assert body["remaining"] == 0
-        assert '"label": "Dark / Moody"' in output.read_text(encoding="utf-8")
+        assert '"label": "moody"' in output.read_text(encoding="utf-8")
 
         connection.request("GET", "/label")
         response = connection.getresponse()
@@ -67,7 +67,7 @@ def test_label_decision_endpoint_persists_human_label(tmp_path):
 
 def test_label_decision_rejects_unknown_vibe(tmp_path):
     image = tmp_path / "image.jpg"
-    candidate = LabelCandidate(image.resolve(), "Retro Blue", 0.43, True, (VibeScore("Retro Blue", 0.48),))
+    candidate = LabelCandidate(image.resolve(), "retro", 0.43, True, (VibeScore("retro", 0.48),))
     session = LabelSession((candidate,), tmp_path / "labels.jsonl")
     server = ThreadingHTTPServer(("127.0.0.1", 0), create_app(tmp_path / "missing.db", label_session=session))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
