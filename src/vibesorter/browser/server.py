@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import json
 import mimetypes
 import sqlite3
@@ -10,7 +9,15 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ..profile import ImageProfile
-from ..taxonomy import ATTRIBUTE_FAMILIES, Brightness, Color, MediaType, Saturation, Temperature, Vibe
+from ..taxonomy import (
+    ATTRIBUTE_FAMILIES,
+    Brightness,
+    Color,
+    MediaType,
+    Saturation,
+    Temperature,
+    Vibe,
+)
 from ..vibes import VibeScore, confidence_score, is_confident
 from .labeling_ui import render_label_page
 from .ui import render_page
@@ -28,239 +35,230 @@ def _table_info(conn: sqlite3.Connection) -> tuple[str | None, dict[str, str]]:
     return table, {
         "path": "path" if "path" in columns else ("image_path" if "image_path" in columns else ""),
         "vibe": "vibe" if "vibe" in columns else ("primary_vibe" if "primary_vibe" in columns else ""),
-        "confidence": "confidence" if "confidence" in columns else ("confidence_score" if "confidence_score" in columns else ""),
+        "score": "score" if "score" in columns else ("primary_score" if "primary_score" in columns else ""),
         "scores": "scores" if "scores" in columns else "",
-        "features": "features" if "features" in columns else "",
+        "profile": "profile_json" if "profile_json" in columns else "",
     }
 
 
-def _parse_scores(value: str | None) -> tuple[VibeScore, ...]:
-    if not value:
+def _parse_scores(raw: object) -> tuple[VibeScore, ...]:
+    if raw is None:
         return ()
     try:
-        return tuple(VibeScore(str(item["name"]), float(item["score"])) for item in json.loads(value))
-    except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+        data = json.loads(str(raw))
+    except (TypeError, ValueError, json.JSONDecodeError):
         return ()
+    if not isinstance(data, list):
+        return ()
+    scores: list[VibeScore] = []
+    for item in data:
+        if isinstance(item, dict) and "name" in item and "score" in item:
+            try:
+                scores.append(VibeScore(str(item["name"]), float(item["score"])))
+            except (TypeError, ValueError):
+                continue
+    return tuple(scores)
 
 
-def _normalize_row(row: sqlite3.Row, columns: dict[str, str]) -> dict:
-    item = dict(row)
-    path = item.get(columns["path"]) if columns.get("path") else None
-    vibe = item.get(columns["vibe"]) if columns.get("vibe") else None
-    confidence = item.get(columns["confidence"]) if columns.get("confidence") else None
-    scores = item.get(columns["scores"]) if columns.get("scores") else None
-    parsed = _parse_scores(scores)
-    if parsed and (vibe is None or confidence is None):
-        vibe = vibe or parsed[0].name
-        confidence = confidence if confidence is not None else confidence_score(parsed)
-    item["path"] = str(path or "")
-    item["vibe"] = vibe
-    item["confidence"] = confidence
-    return item
+def _normalize_row(row: sqlite3.Row | tuple[object, ...], columns: list[str]) -> dict[str, object]:
+    return dict(zip(columns, row, strict=False))
 
 
-def _selected(params: dict[str, list[str]], name: str) -> tuple[str, ...]:
-    values: list[str] = []
-    for raw in params.get(name, []):
-        values.extend(value.strip().casefold() for value in raw.split(",") if value.strip())
-    return tuple(dict.fromkeys(values))
+def _selected(params: dict[str, list[str]], family: str) -> set[str]:
+    return {value.lower() for value in params.get(family, []) if value}
 
 
 def _profile_matches(profile: ImageProfile | None, params: dict[str, list[str]]) -> bool:
     if profile is None:
         return not any(_selected(params, family) for family in ATTRIBUTE_FAMILIES)
-    singles = {
-        "media_type": profile.media_type.value if profile.media_type else None,
-        "temperature": profile.temperature.value if profile.temperature else None,
-        "saturation": profile.saturation.value if profile.saturation else None,
-        "brightness": profile.brightness.value if profile.brightness else None,
+    values = {
+        "media_type": {profile.media_type.value.lower()} if profile.media_type else set(),
+        "colors": {item.value.lower() for item in profile.colors},
+        "temperature": {profile.temperature.value.lower()} if profile.temperature else set(),
+        "saturation": {profile.saturation.value.lower()} if profile.saturation else set(),
+        "brightness": {profile.brightness.value.lower()} if profile.brightness else set(),
+        "vibes": {item.value.lower() for item in profile.vibes},
     }
-    for family, value in singles.items():
-        wanted = _selected(params, family)
-        if wanted and value not in wanted:
-            return False
-    multi = {
-        "colors": {item.value for item in profile.colors},
-        "vibes": {item.value for item in profile.vibes},
-    }
-    return all(not (wanted := _selected(params, family)) or multi[family].intersection(wanted) for family in multi)
+    return all(not _selected(params, family) or _selected(params, family) <= values[family] for family in ATTRIBUTE_FAMILIES)
 
 
-def _profile_for(conn: sqlite3.Connection, path: str) -> ImageProfile | None:
+def _profile_for(row: dict[str, object], columns: dict[str, str]) -> ImageProfile | None:
+    field = columns.get("profile")
+    if not field or not row.get(field):
+        return None
     try:
-        row = conn.execute("SELECT profile FROM profiles WHERE path=?", (path,)).fetchone()
-        return ImageProfile.from_json(row[0]) if row else None
-    except (TypeError, ValueError, KeyError, json.JSONDecodeError, sqlite3.OperationalError):
+        return ImageProfile.from_json(str(row[field]))
+    except (TypeError, ValueError, json.JSONDecodeError):
         return None
 
 
-def _query_rows(db_path: Path, params: dict[str, list[str]], *, limit: int, offset: int) -> tuple[list[dict], int]:
-    if not db_path.exists():
-        return [], 0
-    limit = max(1, min(limit, MAX_LIMIT))
-    offset = max(0, offset)
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
+def _query_rows(
+    db_path: Path,
+    params_or_vibe: dict[str, list[str]] | str | None = None,
+    query: str | None = None,
+    *,
+    limit: int,
+    offset: int,
+) -> tuple[list[dict[str, object]], int]:
+    if isinstance(params_or_vibe, dict):
+        params = params_or_vibe
+    else:
+        params = {}
+        if params_or_vibe:
+            params["vibe"] = [params_or_vibe]
+        if query:
+            params["q"] = [query]
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
         table, columns = _table_info(conn)
-        if not table or not columns.get("path"):
+        if table is None or not columns["path"]:
             return [], 0
-        rows = conn.execute(f"SELECT * FROM {table} ORDER BY {columns['path']} COLLATE NOCASE").fetchall()
-        query = (params.get("q", [""])[0] or "").casefold()
-        vibe = (params.get("vibe", [""])[0] or "").casefold()
-        matches: list[dict] = []
+        select_columns = [columns["path"]]
+        for key in ("vibe", "score", "scores", "profile"):
+            if columns[key] and columns[key] not in select_columns:
+                select_columns.append(columns[key])
+        where: list[str] = []
+        values: list[str] = []
+        search = params.get("q", [""])[0].strip()
+        if search:
+            where.append(f"LOWER({columns['path']}) LIKE ?")
+            values.append(f"%{search.lower()}%")
+        sql = f"SELECT {', '.join(select_columns)} FROM {table}"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += f" ORDER BY {columns['path']} LIMIT ? OFFSET ?"
+        raw_rows = conn.execute(sql, (*values, limit, offset)).fetchall()
+        count_sql = f"SELECT COUNT(*) FROM {table}"
+        if where:
+            count_sql += " WHERE " + " AND ".join(where)
+        total = int(conn.execute(count_sql, values).fetchone()[0])
+        rows = [_normalize_row(row, select_columns) for row in raw_rows]
+        filtered: list[dict[str, object]] = []
         for row in rows:
-            item = _normalize_row(row, columns)
-            if query and query not in item["path"].casefold():
-                continue
-            if vibe and str(item.get("vibe") or "").casefold() != vibe:
-                parsed = _parse_scores(item.get(columns.get("scores", ""))) if columns.get("scores") else ()
-                if not any(score.name.casefold() == vibe for score in parsed):
-                    continue
-            if not _profile_matches(_profile_for(conn, item["path"]), params):
-                continue
-            matches.append(item)
-        total = len(matches)
-        return matches[offset : offset + limit], total
+            profile = _profile_for(row, columns)
+            if _profile_matches(profile, params):
+                filtered.append(row)
+        return filtered, total
+    finally:
+        conn.close()
 
 
-def _vibe_summary(db_path: Path) -> list[dict]:
-    if not db_path.exists():
-        return []
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        table, columns = _table_info(conn)
-        if not table or not columns.get("path"):
-            return []
-        counts: dict[str, int] = defaultdict(int)
-        totals: dict[str, float] = defaultdict(float)
-        count_conf: dict[str, int] = defaultdict(int)
-        if columns.get("vibe"):
-            for vibe, confidence in conn.execute(f"SELECT {columns['vibe']}, {columns.get('confidence') or 'NULL'} FROM {table}"):
-                label = str(vibe or "Unclassified")
-                counts[label] += 1
-                if isinstance(confidence, (int, float)):
-                    totals[label] += float(confidence); count_conf[label] += 1
-        elif columns.get("scores"):
-            for (raw,) in conn.execute(f"SELECT {columns['scores']} FROM {table}"):
-                scores = _parse_scores(raw)
-                label = scores[0].name if scores else "Unclassified"
-                counts[label] += 1
-                if scores:
-                    totals[label] += confidence_score(scores); count_conf[label] += 1
-        return [{"vibe": label, "count": counts[label], "average_confidence": round(totals[label] / count_conf[label], 4) if count_conf[label] else None} for label in sorted(counts, key=lambda item: (-counts[item], item.casefold()))]
+def _rows(db_path: Path, vibe: str | None, query: str | None) -> list[dict[str, object]]:
+    rows, _ = _query_rows(db_path, vibe, query, limit=MAX_LIMIT, offset=0)
+    return rows
 
 
-def _image_detail(db_path: Path, requested: str) -> dict | None:
-    if not db_path.exists():
+def _vibe_summary(scores: tuple[VibeScore, ...]) -> str:
+    if not scores:
+        return "Unclassified"
+    selected = [score.name for score in scores if score.score >= 0.45]
+    return ", ".join(selected) if selected else scores[0].name
+
+
+def _image_detail(db_path: Path, path: str) -> dict[str, object] | None:
+    rows, _ = _query_rows(db_path, {}, path, limit=1, offset=0)
+    return rows[0] if rows else None
+
+
+def _image_path(db_path: Path, raw_path: str) -> Path | None:
+    detail = _image_detail(db_path, raw_path)
+    if detail is None:
         return None
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        table, columns = _table_info(conn)
-        if not table or not columns.get("path"):
-            return None
-        row = conn.execute(f"SELECT * FROM {table} WHERE {columns['path']}=?", (requested,)).fetchone()
-        if row is None:
-            return None
-        item = _normalize_row(row, columns)
-        scores = _parse_scores(item.get(columns.get("scores", ""))) if columns.get("scores") else ()
-        path = Path(item["path"]).expanduser()
-        features = {}
-        if columns.get("features"):
-            try:
-                raw = json.loads(item.get(columns["features"]) or "{}")
-                features = {key: raw[key] for key in ("brightness", "saturation", "contrast", "warm_ratio", "cool_ratio", "grayscale_ratio", "dark_ratio", "light_ratio", "text_likelihood") if key in raw}
-            except (TypeError, json.JSONDecodeError):
-                pass
-        profile = _profile_for(conn, item["path"])
-        return {"path": item["path"], "vibe": item.get("vibe"), "confidence": float(item["confidence"]) if isinstance(item.get("confidence"), (int, float)) else (confidence_score(scores) if scores else 0.0), "ambiguous": not is_confident(scores) if scores else None, "scores": [{"name": s.name, "score": s.score} for s in scores], "profile": profile.to_dict() if profile else None, "features": features, "file": {"exists": path.is_file(), "size": path.stat().st_size if path.is_file() else None}}
+    path_value = detail.get("path") or detail.get("image_path")
+    return Path(str(path_value)) if path_value else None
 
 
-def _image_path(db_path: Path, requested: str) -> Path | None:
-    if not db_path.exists():
-        return None
-    with sqlite3.connect(db_path) as conn:
-        table, columns = _table_info(conn)
-        if not table or not columns.get("path"):
-            return None
-        row = conn.execute(f"SELECT {columns['path']} FROM {table} WHERE {columns['path']}=?", (requested,)).fetchone()
-    if not row:
-        return None
-    path = Path(row[0]).expanduser()
-    return path if path.is_file() else None
-
-
-def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=None):
-    db = Path(db_path)
-
+def create_app(db_path: Path, *, image_root: Path | None = None):
     class Handler(BaseHTTPRequestHandler):
-        def _send(self, status: int, content: str, content_type: str = "text/html; charset=utf-8") -> None:
-            body = content.encode(); self.send_response(status); self.send_header("Content-Type", content_type); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
-        def _send_bytes(self, status: int, body: bytes, content_type: str) -> None:
-            self.send_response(status); self.send_header("Content-Type", content_type); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
-        def _json(self, status: int, payload: dict) -> None:
-            self._send(status, json.dumps(payload, ensure_ascii=False), "application/json; charset=utf-8")
-        def do_GET(self) -> None:
-            parsed = urlparse(self.path); params = parse_qs(parsed.query)
-            if parsed.path == "/label":
-                if label_session is None: self._send(404, "Labeling session not configured", "text/plain; charset=utf-8")
-                else: self._send(200, render_label_page(label_session))
+        def do_GET(self) -> None:  # noqa: N802
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+            if parsed.path == "/":
+                rows, _ = _query_rows(db_path, params, limit=DEFAULT_LIMIT, offset=0)
+                body = render_page(rows)
+                self._send(200, body, "text/html; charset=utf-8")
+                return
+            if parsed.path == "/api/images":
+                try:
+                    limit = min(MAX_LIMIT, max(1, int(params.get("limit", [DEFAULT_LIMIT])[0])))
+                    offset = max(0, int(params.get("offset", [0])[0]))
+                except ValueError:
+                    self._send(400, "invalid pagination", "text/plain; charset=utf-8")
+                    return
+                rows, total = _query_rows(db_path, params, limit=limit, offset=offset)
+                self._send_json(200, {"items": rows, "total": total})
                 return
             if parsed.path == "/api/attributes":
-                values = {"media_type": [item.value for item in MediaType], "colors": [item.value for item in Color], "temperature": [item.value for item in Temperature], "saturation": [item.value for item in Saturation], "brightness": [item.value for item in Brightness], "vibes": [item.value for item in Vibe]}
-                self._json(200, {"families": ATTRIBUTE_FAMILIES, "values": values}); return
+                self._send_json(200, {
+                    "media_type": [item.value for item in MediaType],
+                    "colors": [item.value for item in Color],
+                    "temperature": [item.value for item in Temperature],
+                    "saturation": [item.value for item in Saturation],
+                    "brightness": [item.value for item in Brightness],
+                    "vibes": [item.value for item in Vibe],
+                })
+                return
             if parsed.path == "/api/vibes":
-                self._send(200, json.dumps({"items": _vibe_summary(db)}, ensure_ascii=False), "application/json; charset=utf-8"); return
+                self._send_json(200, {"vibes": [item.value for item in Vibe]})
+                return
             if parsed.path == "/api/image-details":
-                detail = _image_detail(db, unquote(params.get("path", [""])[0]))
-                if detail is None: self._send(404, "Image not found", "text/plain; charset=utf-8")
-                else: self._json(200, detail)
-                return
-            try: limit = int(params.get("limit", [DEFAULT_LIMIT])[0]); page = max(1, int(params.get("page", [1])[0]))
-            except ValueError: self._send(400, "Invalid pagination", "text/plain; charset=utf-8"); return
-            if parsed.path == "/api/images":
-                safe_limit = min(max(1, limit), MAX_LIMIT); rows, total = _query_rows(db, params, limit=safe_limit, offset=(page - 1) * safe_limit)
-                self._json(200, {"items": rows, "page": page, "limit": safe_limit, "total": total}); return
-            if parsed.path == "/api/image":
-                image = _image_path(db, unquote(params.get("path", [""])[0]))
-                if image is None: self._send(404, "Image not found", "text/plain; charset=utf-8")
+                path = unquote(params.get("path", [""])[0])
+                detail = _image_detail(db_path, path)
+                if detail is None:
+                    self._send_json(404, {"error": "image not found"})
                 else:
-                    try: self._send_bytes(200, image.read_bytes(), mimetypes.guess_type(image.name)[0] or "application/octet-stream")
-                    except OSError: self._send(404, "Image not found", "text/plain; charset=utf-8")
+                    self._send_json(200, detail)
                 return
-            if parsed.path != "/": self._send(404, "Not found", "text/plain; charset=utf-8"); return
-            self._send(200, render_page())
-        def do_POST(self) -> None:
-            path = urlparse(self.path).path
-            if label_session is None or path not in {"/api/label/decision", "/api/label/undo"}:
-                self._json(404, {"error": "Labeling session not configured" if label_session is None else "Not found"}); return
-            if path == "/api/label/undo": self._json(200, {"undone": label_session.undo(), "labelled": label_session.labelled}); return
-            try:
-                length = int(self.headers.get("Content-Length", "0")); data = json.loads(self.rfile.read(length) or b"{}"); requested = str(data["path"]); label = data.get("label"); skip = bool(data.get("skip", False))
-                candidate = next((item for item in label_session.remaining if str(item.path.resolve()) == str(Path(requested).expanduser().resolve())), None)
-                if candidate is None: raise ValueError("unknown or already-labelled image")
-                label_session.decide(candidate, None if skip else str(label))
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc: self._json(400, {"error": str(exc)}); return
-            self._json(200, {"ok": True, "labelled": label_session.labelled, "remaining": len(label_session.remaining)})
-        def log_message(self, *_args) -> None: return
+            if parsed.path == "/api/image":
+                raw_path = unquote(params.get("path", [""])[0])
+                path = _image_path(db_path, raw_path)
+                if path is None or not path.is_file():
+                    self._send(404, "image not found", "text/plain; charset=utf-8")
+                    return
+                if image_root is not None:
+                    try:
+                        path.resolve().relative_to(image_root.resolve())
+                    except ValueError:
+                        self._send(403, "image outside configured root", "text/plain; charset=utf-8")
+                        return
+                data = path.read_bytes()
+                content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+                self._send(200, data, content_type)
+                return
+            if parsed.path == "/label":
+                self._send(200, render_label_page(), "text/html; charset=utf-8")
+                return
+            self._send(404, "not found", "text/plain; charset=utf-8")
+
+        def _send(self, status: int, body: str | bytes, content_type: str) -> None:
+            data = body.encode("utf-8") if isinstance(body, str) else body
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _send_json(self, status: int, payload: object) -> None:
+            self._send(status, json.dumps(payload, ensure_ascii=False), "application/json; charset=utf-8")
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
     return Handler
 
 
-def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127.0.0.1", port: int = 8765, label_session=None) -> None:
-    server = ThreadingHTTPServer((host, port), create_app(db_path, label_session=label_session)); print(f"VibeSorter browser: http://{host}:{port}")
-    try: server.serve_forever()
-    except KeyboardInterrupt: pass
-    finally: server.server_close()
+def run_server(db_path: Path, host: str = "127.0.0.1", port: int = 8765) -> None:
+    server = ThreadingHTTPServer((host, port), create_app(db_path))
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
 
 
-def run_label_server(label_session, *, db_path: str | Path, host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = ThreadingHTTPServer((host, port, ), create_app(db_path, label_session=label_session)); print(f"VibeSorter labeling: http://{host}:{port}/label")
-    try: server.serve_forever()
-    except KeyboardInterrupt: pass
-    finally: server.server_close()
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Browse VibeSorter analysis locally."); parser.add_argument("--db", default=".vibesorter/analysis.db"); parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, default=8765); args = parser.parse_args(); run_server(args.db, args.host, args.port)
-
-
-if __name__ == "__main__": main()
+def run_label_server(host: str = "127.0.0.1", port: int = 8766) -> None:
+    server = ThreadingHTTPServer((host, port), create_app(Path(".vibesorter/analysis.db")))
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
