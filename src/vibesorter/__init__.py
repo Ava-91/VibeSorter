@@ -1,16 +1,12 @@
 from __future__ import annotations
 
+from .annotation import ImageAnnotation, load_annotations, save_annotation
 from .cache import AnalysisCache
 from .classifier import classify_profile
 from .evaluation import (
-    ClassificationMetrics,
-    ConfidenceCalibrator,
-    ConfidenceObservation,
-    LabelledImage,
-    collect_confidence_observations,
-    evaluate_classifier,
-    evaluate_labels,
-    load_labels,
+    ClassificationMetrics, ConfidenceCalibrator, ConfidenceObservation,
+    LabelledImage, collect_confidence_observations, evaluate_classifier,
+    evaluate_labels, load_labels,
 )
 from .features import ColorSample, ImageFeatures, SpatialRegion, extract_features
 from .learned import LearnedClassifier, feature_vector
@@ -28,11 +24,12 @@ __all__ = [
     "VIBES", "AnalysisCache", "AnalysisResult", "ATTRIBUTE_CARDINALITY",
     "ATTRIBUTE_FAMILIES", "AttributeValue", "Brightness", "ClassificationMetrics",
     "Color", "ColorSample", "ConfidenceCalibrator", "ConfidenceObservation",
-    "ImageFeatures", "ImageProfile", "ImageQuery", "LabelledImage", "LearnedClassifier",
-    "LibraryAnalysisStats", "MediaType", "Saturation", "SpatialRegion",
-    "TAXONOMY_VERSION", "Temperature", "Vibe", "VibeScore", "analyze_folder",
-    "analyze_image", "analyze_library", "analyze_library_stats", "classify",
-    "classify_profile", "collect_confidence_observations", "evaluate_classifier",
-    "evaluate_labels", "extract_features", "feature_vector", "load_labels",
-    "score_vibes", "search_cache", "select_vibes",
+    "ImageAnnotation", "ImageFeatures", "ImageProfile", "ImageQuery", "LabelledImage",
+    "LearnedClassifier", "LibraryAnalysisStats", "MediaType", "Saturation",
+    "SpatialRegion", "TAXONOMY_VERSION", "Temperature", "Vibe", "VibeScore",
+    "analyze_folder", "analyze_image", "analyze_library", "analyze_library_stats",
+    "classify", "classify_profile", "collect_confidence_observations",
+    "evaluate_classifier", "evaluate_labels", "extract_features", "feature_vector",
+    "load_annotations", "load_labels", "save_annotation", "score_vibes", "search_cache",
+    "select_vibes",
 ]
