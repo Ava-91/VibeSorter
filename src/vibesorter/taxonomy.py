@@ -62,8 +62,6 @@ ATTRIBUTE_FAMILIES = (
     "vibes",
 )
 
-# Cardinality is part of the public taxonomy contract. A family marked multi
-# may contain several values for the same image; this is intentional.
 ATTRIBUTE_CARDINALITY = {
     "media_type": "single",
     "colors": "multi",
@@ -73,20 +71,19 @@ ATTRIBUTE_CARDINALITY = {
     "vibes": "multi",
 }
 
-LEGACY_COMPOUND_VIBES = (
-    "Retro Blue",
-    "Red / Warm",
-    "Green & Black",
-    "Black & White",
-    "Soft / Pastel",
-    "Dark / Moody",
-    "Bright / Colorful",
-    "Neutral / Photo Dump",
-)
-
 TAXONOMY_VERSION = "2.0"
 
+ATTRIBUTE_ENUMS = {
+    "media_type": MediaType,
+    "colors": Color,
+    "temperature": Temperature,
+    "saturation": Saturation,
+    "brightness": Brightness,
+    "vibes": Vibe,
+}
 
-def is_legacy_label(value: str) -> bool:
-    """Return whether *value* belongs to the pre-v2 compound taxonomy."""
-    return value in LEGACY_COMPOUND_VIBES
+
+def is_valid_attribute_value(family: str, value: str) -> bool:
+    """Return whether a value belongs to the canonical family vocabulary."""
+    enum_type = ATTRIBUTE_ENUMS.get(family)
+    return enum_type is not None and value in {item.value for item in enum_type}
