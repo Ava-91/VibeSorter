@@ -5,12 +5,21 @@ from vibesorter.features import ColorSample, ImageFeatures
 
 
 def features(**overrides) -> ImageFeatures:
-    values = dict(
-        path=Path("image.jpg"), average_rgb=(180, 40, 60), average_hsv=(0.98, 0.78, 0.70),
-        brightness=0.70, saturation=0.78, contrast=0.30, warm_ratio=0.10, cool_ratio=0.45,
-        grayscale_ratio=0.05, dark_ratio=0.10, light_ratio=0.30, text_likelihood=0.05,
-        colors=(ColorSample((190, 40, 60), 0.65), ColorSample((40, 70, 180), 0.25)),
-    )
+    values = {
+        "path": Path("image.jpg"),
+        "average_rgb": (180, 40, 60),
+        "average_hsv": (0.98, 0.78, 0.70),
+        "brightness": 0.70,
+        "saturation": 0.78,
+        "contrast": 0.30,
+        "warm_ratio": 0.10,
+        "cool_ratio": 0.45,
+        "grayscale_ratio": 0.05,
+        "dark_ratio": 0.10,
+        "light_ratio": 0.30,
+        "text_likelihood": 0.05,
+        "colors": (ColorSample((190, 40, 60), 0.65), ColorSample((40, 70, 180), 0.25)),
+    }
     values.update(overrides)
     return ImageFeatures(**values)
 
