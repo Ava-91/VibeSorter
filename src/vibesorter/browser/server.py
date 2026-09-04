@@ -338,11 +338,7 @@ def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127
 
 
 def run_label_server(label_session, *, db_path: str | Path, host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = ThreadingHTTPServer((host, port), create_app(db_path, label_session=label_session))
-    print(f"VibeSorter labeling: http://{host}:{port}/label")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
+    server = ThreadingHTTPServer((host, port, ), create_app(db_path, label_session=label_session)); print(f"VibeSorter labeling: http://{host}:{port}/label")
+    try: server.serve_forever()
+    except KeyboardInterrupt: pass
+    finally: server.server_close()
