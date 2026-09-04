@@ -7,9 +7,9 @@ from pathlib import Path
 
 from .annotation import ImageAnnotation
 from .features import ImageFeatures, extract_features
+from .learned import feature_vector
 from .profile import AttributeValue, ImageProfile
 from .taxonomy import ATTRIBUTE_FAMILIES
-from .learned import feature_vector
 
 MODEL_VERSION = 2
 MULTI_FAMILY = {"colors", "vibes"}
@@ -68,7 +68,11 @@ class LearnedProfileClassifier:
             return AttributeValue(value, confidence, "learned")
 
         def many(family: str) -> tuple[AttributeValue, ...]:
-            return tuple(AttributeValue(value, confidence, "learned") for value, confidence in self._scores(family, vector) if confidence >= 0.35)
+            return tuple(
+                AttributeValue(value, confidence, "learned")
+                for value, confidence in self._scores(family, vector)
+                if confidence >= 0.35
+            )
 
         return ImageProfile(
             media_type=one("media_type"), colors=many("colors"), temperature=one("temperature"),
