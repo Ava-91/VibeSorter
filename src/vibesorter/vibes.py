@@ -87,7 +87,9 @@ def _score_components(features: ImageFeatures) -> dict[str, dict[str, float]]:
     }
     strongest_aesthetic = max(existing_scores.values(), default=0.0)
     components["Neutral / Photo Dump"] = {
-        "absence_of_strong_aesthetic": _clamp(1.0 - strongest_aesthetic),
+        "absence_of_strong_aesthetic": _clamp(
+            (1.0 - strongest_aesthetic) * (0.65 + 0.35 * contrast)
+        ),
     }
     return components
 

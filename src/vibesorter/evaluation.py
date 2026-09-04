@@ -48,7 +48,7 @@ class ClassificationMetrics:
 def _metrics(labels: tuple[LabelledImage, ...], predictor) -> ClassificationMetrics:
     matrix = {actual: {predicted: 0 for predicted in VIBES} for actual in VIBES}
     for item in labels:
-        matrix[item.label][predictor(item).name] += 1
+        matrix[item.label][predictor(item.path).name] += 1
 
     total = sum(sum(row.values()) for row in matrix.values())
     correct = sum(matrix[vibe][vibe] for vibe in VIBES)
@@ -78,7 +78,7 @@ def _metrics(labels: tuple[LabelledImage, ...], predictor) -> ClassificationMetr
 
 def evaluate_labels(labels: tuple[LabelledImage, ...]) -> ClassificationMetrics:
     """Evaluate the deterministic heuristic classifier against human labels."""
-    return _metrics(labels, lambda item: classify(extract_features(item.path)))
+    return _metrics(labels, lambda path: classify(extract_features(path)))
 
 
 def evaluate_classifier(labels: tuple[LabelledImage, ...], classifier) -> ClassificationMetrics:
@@ -129,7 +129,7 @@ class ConfidenceCalibrator:
         self.bins = bins
         self._calibration = ()
 
-    def fit(self, observations: tuple[ConfidenceObservation, ...]) -> "ConfidenceCalibrator":
+    def fit(self, observations: tuple[ConfidenceObservation, ...]) -> ConfidenceCalibrator:
         width = 1.0 / self.bins
         fitted = []
         for index in range(self.bins):

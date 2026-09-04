@@ -29,7 +29,7 @@ class LearnedClassifier:
     samples: dict[str, int]
 
     @classmethod
-    def fit(cls, labels: tuple[LabelledImage, ...]) -> "LearnedClassifier":
+    def fit(cls, labels: tuple[LabelledImage, ...]) -> LearnedClassifier:
         grouped: dict[str, list[tuple[float, ...]]] = {vibe: [] for vibe in VIBES}
         for item in labels:
             grouped[item.label].append(feature_vector(extract_features(item.path)))
@@ -62,7 +62,7 @@ class LearnedClassifier:
         target.write_text(json.dumps({"version": MODEL_VERSION, "centroids": self.centroids, "samples": self.samples}, indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls, path: str | Path) -> "LearnedClassifier":
+    def load(cls, path: str | Path) -> LearnedClassifier:
         data = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
         if data.get("version") != MODEL_VERSION:
             raise ValueError("unsupported learned classifier model version")

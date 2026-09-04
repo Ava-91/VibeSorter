@@ -1,6 +1,6 @@
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from vibesorter.scanner import find_images
 
@@ -32,9 +32,11 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(find_images(root, recursive=False), [root / "one.jpg"])
 
     def test_find_images_rejects_missing_folder(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaises(FileNotFoundError):
-                find_images(Path(directory) / "missing")
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            self.assertRaises(FileNotFoundError),
+        ):
+            find_images(Path(directory) / "missing")
 
     def test_find_images_rejects_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

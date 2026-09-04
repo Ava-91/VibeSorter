@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-from PIL import Image, ImageOps
+from PIL import Image
 
 from vibesorter.features import extract_features
 

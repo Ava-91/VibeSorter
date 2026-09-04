@@ -10,8 +10,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ..vibes import VibeScore, confidence_score, is_confident
-from .ui import render_page
 from .labeling_ui import render_label_page
+from .ui import render_page
 
 DEFAULT_LIMIT = 48
 MAX_LIMIT = 120
@@ -189,7 +189,7 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
             self.send_response(status); self.send_header("Content-Type", content_type); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
         def _json(self, status: int, payload: dict) -> None:
             self._send(status, json.dumps(payload, ensure_ascii=False), "application/json; charset=utf-8")
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             parsed = urlparse(self.path); params = parse_qs(parsed.query); vibe = params.get("vibe", [None])[0]; query = params.get("q", [None])[0]
             if parsed.path == "/label":
                 if label_session is None: self._send(404, "Labeling session not configured", "text/plain; charset=utf-8")
@@ -218,7 +218,7 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
                 return
             if parsed.path != "/": self._send(404, "Not found", "text/plain; charset=utf-8"); return
             self._send(200, render_page())
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             if label_session is None or urlparse(self.path).path not in {"/api/label/decision", "/api/label/undo"}:
                 self._json(404, {"error": "Labeling session not configured" if label_session is None else "Not found"}); return
             if urlparse(self.path).path == "/api/label/undo":

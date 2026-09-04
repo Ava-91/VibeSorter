@@ -6,7 +6,13 @@ import pytest
 
 from vibesorter.browser.labeling_ui import render_label_page
 from vibesorter.label_sampling import write_label_template
-from vibesorter.labeling import LabelCandidate, LabelSession, build_candidates, load_completed_labels, save_label
+from vibesorter.labeling import (
+    LabelCandidate,
+    LabelSession,
+    build_candidates,
+    load_completed_labels,
+    save_label,
+)
 from vibesorter.vibes import VibeScore
 
 
@@ -82,5 +88,5 @@ def test_label_page_contains_local_review_controls(tmp_path):
     page = render_label_page(session)
     assert "Assisted labeling" in page
     assert "/api/label/decision" in page
-    assert "Enter" in page and "1–7" in page and "Skip" in page and "Undo" in page
+    assert "Enter" in page and "1–8" in page and "Skip" in page and "Undo" in page
     assert str((tmp_path / "a.jpg").resolve()) in page

@@ -21,4 +21,4 @@ class AnalysisCache(SQLiteAnalysisCache):
 
 
 DEFAULT_CACHE_PATH = DEFAULT_SQLITE_PATH
-__all__ = ["AnalysisCache", "DEFAULT_CACHE_PATH", "SCHEMA_VERSION"]
+__all__ = ["DEFAULT_CACHE_PATH", "SCHEMA_VERSION", "AnalysisCache"]

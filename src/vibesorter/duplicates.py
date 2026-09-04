@@ -6,7 +6,6 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
-
 DEFAULT_HASH_SIZE = 8
 DEFAULT_MAX_DISTANCE = 6
 
@@ -63,7 +62,7 @@ class _BKTree:
     """Small metric index that avoids an O(n²) near-duplicate scan."""
 
     def __init__(self) -> None:
-        self._root: tuple[int, list[Path], dict[int, "_BKTree"]] | None = None
+        self._root: tuple[int, list[Path], dict[int, _BKTree]] | None = None
 
     def add(self, value: int, path: Path) -> None:
         if self._root is None:
@@ -94,7 +93,7 @@ class _BKTree:
 
     def _query(
         self,
-        node: tuple[int, list[Path], dict[int, "_BKTree"]],
+        node: tuple[int, list[Path], dict[int, _BKTree]],
         value: int,
         radius: int,
         matches: list[tuple[int, list[Path]]],

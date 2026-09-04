@@ -9,6 +9,7 @@ from .features import ImageFeatures, extract_features
 from .scanner import find_images
 from .vibes import VibeScore, score_vibes, select_vibes
 
+
 @dataclass(frozen=True, slots=True)
 class AnalysisResult:
     path: Path

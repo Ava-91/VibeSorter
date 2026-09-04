@@ -7,6 +7,7 @@ from .diagnostics import diagnose
 from .features import extract_features
 from .vibes import score_vibe_contributions, score_vibes, select_vibes
 
+
 @dataclass(frozen=True, slots=True)
 class Explanation:
     path: Path
