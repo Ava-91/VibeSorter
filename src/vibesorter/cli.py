@@ -24,7 +24,7 @@ from .proposal import (
     proposal_to_dict,
     proposal_to_json,
 )
-from .review import ReviewedOperation, parse_selection, review_proposal
+from .review import ReviewedOperation, parse_selection, review_proposal, reviewed_to_json
 from .scanner import find_images
 from .search import ImageQuery, search_cache
 from .vibes import VIBES
@@ -56,11 +56,7 @@ def _add_dimension_arguments(command: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="vibesorter",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="Detect visual vibes in local images and safely organize large image libraries.",
-        epilog="""Workflow examples:
+    parser = argparse.ArgumentParser(prog="vibesorter", formatter_class=argparse.RawDescriptionHelpFormatter, description="Detect visual vibes in local images and safely organize large image libraries.", epilog="""Workflow examples:
   Analyze a library:   vibesorter preview ./photos
   Search the cache:    vibesorter search ./photos --vibe 'Dark / Moody'
   Inspect one image:   vibesorter analyze ./photo.jpg
@@ -71,58 +67,27 @@ def build_parser() -> argparse.ArgumentParser:
   Apply reviewed moves:vibesorter apply reviewed.json --confirm
   Undo a batch:        vibesorter rollback BATCH_ID --confirm
 
-Read-only commands never modify your images. Filesystem changes require explicit --confirm.""",
-    )
+Read-only commands never modify your images. Filesystem changes require explicit --confirm.""")
     parser.add_argument("--version", action="version", version="VibeSorter 0.8.1")
     subparsers = parser.add_subparsers(dest="command", required=True, title="commands", metavar="COMMAND")
-
-    scan = subparsers.add_parser("scan", help="Discover supported images (read-only).", description="List supported images without analyzing or changing them.")
-    _add_folder_argument(scan)
-
-    preview = subparsers.add_parser("preview", help="Analyze a folder and show its vibe distribution.", description="Analyze images locally and print their detected vibe, confidence, and path.")
-    _add_folder_argument(preview); _add_workers_argument(preview); _add_filter_arguments(preview); preview.add_argument("--top", type=int, default=5, help="Examples to print per vibe (default: 5)."); preview.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-
-    analyze = subparsers.add_parser("analyze", help="Analyze one image in detail.", description="Show the best vibe, confidence, text/screenshot likelihood, and full vibe ranking for one image.")
-    analyze.add_argument("image", type=Path, help="Image file to analyze."); analyze.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-
-    stats = subparsers.add_parser("stats", help="Summarize vibe counts for a folder.", description="Analyze a folder and report counts and average confidence for each detected vibe.")
-    _add_folder_argument(stats); _add_workers_argument(stats); _add_filter_arguments(stats); stats.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-
-    search = subparsers.add_parser("search", help="Search the existing analysis cache (fast, read-only).", description="Query .vibesorter/analysis.json without rescanning or re-analyzing images.")
-    search.add_argument("folder", type=Path, help="Analyzed image library containing .vibesorter/analysis.json.")
-    search.add_argument("--vibe", choices=VIBES, help="Only return images with this best vibe.")
-    search.add_argument("--min-score", type=float, default=0.0, help="Minimum vibe score from 0 to 1.")
-    search.add_argument("--max-text-likelihood", type=float, default=1.0, help="Maximum text/screenshot likelihood from 0 to 1.")
-    search.add_argument("--path", dest="path_contains", help="Case-insensitive filename/path substring.")
-    _add_dimension_arguments(search); search.add_argument("--limit", type=int, help="Maximum number of matching results."); search.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-
-    duplicates = subparsers.add_parser("duplicates", help="Find exact and visually near-duplicate images.", description="Compare images for exact hashes and perceptual near-duplicates. This command is read-only.")
-    _add_folder_argument(duplicates); duplicates.add_argument("--max-distance", type=int, default=DEFAULT_MAX_DISTANCE, help=f"Maximum perceptual distance for near duplicates (default: {DEFAULT_MAX_DISTANCE})."); duplicates.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-
-    propose = subparsers.add_parser("propose", help="Generate a safe folder organization proposal.", description="Create a deterministic JSON plan for sorting images by vibe. No files are moved.")
-    _add_folder_argument(propose); _add_workers_argument(propose); _add_filter_arguments(propose); propose.add_argument("--output-root", type=Path, default=Path("VibeSorted"), help="Root folder proposed for organized images (default: VibeSorted)."); propose.add_argument("--output", type=Path, help="Write the proposal JSON to this path."); propose.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-
-    review = subparsers.add_parser("review", help="Review a saved organization proposal.", description="Accept or reject proposed moves without touching the source images.")
-    review.add_argument("proposal", type=Path, help="Proposal JSON produced by propose."); review.add_argument("--accept", default="", help="Accept operation IDs/ranges, e.g. 1,3-5 or all."); review.add_argument("--reject", default="", help="Reject operation IDs/ranges, e.g. 2,7-9 or all."); review.add_argument("--accept-vibe", action="append", default=[], help="Accept every operation for this vibe; repeatable."); review.add_argument("--reject-vibe", action="append", default=[], help="Reject every operation for this vibe; repeatable."); review.add_argument("--output", type=Path, help="Write the reviewed JSON to this path."); review.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-
-    gallery = subparsers.add_parser("gallery", help="Build a local HTML image gallery.", description="Build an image-grid gallery from an existing proposal without re-analysis.")
-    gallery.add_argument("proposal", type=Path, help="Proposal or reviewed proposal JSON."); gallery.add_argument("--output", type=Path, default=Path("vibesorter-gallery.html"), help="HTML output path (default: vibesorter-gallery.html).")
-
-    apply = subparsers.add_parser("apply", help="Apply accepted filesystem moves.", description="Apply only accepted operations from a reviewed proposal. Requires explicit --confirm unless using --dry-run.")
-    apply.add_argument("reviewed", type=Path, help="Reviewed proposal JSON produced by review."); apply.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); apply.add_argument("--dry-run", action="store_true", help="Show what would move without changing files."); apply.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Where to record successful moves."); apply.add_argument("--json", action="store_true", help="Print machine-readable results.")
-
-    rollback = subparsers.add_parser("rollback", help="Undo a completed sorting batch.", description="Restore files from a recorded apply batch. Requires explicit --confirm unless using --dry-run.")
-    rollback.add_argument("batch_id", help="Batch ID printed by apply."); rollback.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); rollback.add_argument("--dry-run", action="store_true", help="Check what would be restored without changing files."); rollback.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Move history JSONL file."); rollback.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-
-    history = subparsers.add_parser("history", help="Inspect recorded sorting operations.", description="Show successful sorting operations recorded by apply.")
-    history.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Move history JSONL file."); history.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    scan = subparsers.add_parser("scan", help="Discover supported images (read-only).", description="List supported images without analyzing or changing them."); _add_folder_argument(scan)
+    preview = subparsers.add_parser("preview", help="Analyze a folder and show its vibe distribution.", description="Analyze images locally and print their detected vibe, confidence, and path."); _add_folder_argument(preview); _add_workers_argument(preview); _add_filter_arguments(preview); preview.add_argument("--top", type=int, default=5, help="Examples to print per vibe (default: 5)."); preview.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    analyze = subparsers.add_parser("analyze", help="Analyze one image in detail.", description="Show the best vibe, confidence, text/screenshot likelihood, and full vibe ranking for one image."); analyze.add_argument("image", type=Path, help="Image file to analyze."); analyze.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    stats = subparsers.add_parser("stats", help="Summarize vibe counts for a folder.", description="Analyze a folder and report counts and average confidence for each detected vibe."); _add_folder_argument(stats); _add_workers_argument(stats); _add_filter_arguments(stats); stats.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    search = subparsers.add_parser("search", help="Search the existing analysis cache (fast, read-only).", description="Query .vibesorter/analysis.json without rescanning or re-analyzing images."); search.add_argument("folder", type=Path, help="Analyzed image library containing .vibesorter/analysis.json."); search.add_argument("--vibe", choices=VIBES, help="Only return images with this best vibe."); search.add_argument("--min-score", type=float, default=0.0, help="Minimum vibe score from 0 to 1."); search.add_argument("--max-text-likelihood", type=float, default=1.0, help="Maximum text/screenshot likelihood from 0 to 1."); search.add_argument("--path", dest="path_contains", help="Case-insensitive filename/path substring."); _add_dimension_arguments(search); search.add_argument("--limit", type=int, help="Maximum number of matching results."); search.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    duplicates = subparsers.add_parser("duplicates", help="Find exact and visually near-duplicate images.", description="Compare images for exact hashes and perceptual near-duplicates. This command is read-only."); _add_folder_argument(duplicates); duplicates.add_argument("--max-distance", type=int, default=DEFAULT_MAX_DISTANCE, help=f"Maximum perceptual distance for near duplicates (default: {DEFAULT_MAX_DISTANCE})."); duplicates.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    propose = subparsers.add_parser("propose", help="Generate a safe folder organization proposal.", description="Create a deterministic JSON plan for sorting images by vibe. No files are moved."); _add_folder_argument(propose); _add_workers_argument(propose); _add_filter_arguments(propose); propose.add_argument("--output-root", type=Path, default=Path("VibeSorted"), help="Root folder proposed for organized images (default: VibeSorted)."); propose.add_argument("--output", type=Path, help="Write the proposal JSON to this path."); propose.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    review = subparsers.add_parser("review", help="Review a saved organization proposal.", description="Accept or reject proposed moves without touching the source images."); review.add_argument("proposal", type=Path, help="Proposal JSON produced by propose."); review.add_argument("--accept", default="", help="Accept operation IDs/ranges, e.g. 1,3-5 or all."); review.add_argument("--reject", default="", help="Reject operation IDs/ranges, e.g. 2,7-9 or all."); review.add_argument("--accept-vibe", action="append", default=[], help="Accept every operation for this vibe; repeatable."); review.add_argument("--reject-vibe", action="append", default=[], help="Reject every operation for this vibe; repeatable."); review.add_argument("--output", type=Path, help="Write the reviewed JSON to this path."); review.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    gallery = subparsers.add_parser("gallery", help="Build a local HTML image gallery.", description="Build an image-grid gallery from an existing proposal without re-analysis."); gallery.add_argument("proposal", type=Path, help="Proposal or reviewed proposal JSON."); gallery.add_argument("--output", type=Path, default=Path("vibesorter-gallery.html"), help="HTML output path (default: vibesorter-gallery.html).")
+    apply = subparsers.add_parser("apply", help="Apply accepted filesystem moves.", description="Apply only accepted operations from a reviewed proposal. Requires explicit --confirm unless using --dry-run."); apply.add_argument("reviewed", type=Path, help="Reviewed proposal JSON produced by review."); apply.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); apply.add_argument("--dry-run", action="store_true", help="Show what would move without changing files."); apply.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Where to record successful moves."); apply.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    rollback = subparsers.add_parser("rollback", help="Undo a completed sorting batch.", description="Restore files from a recorded apply batch. Requires explicit --confirm unless using --dry-run."); rollback.add_argument("batch_id", help="Batch ID printed by apply."); rollback.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); rollback.add_argument("--dry-run", action="store_true", help="Check what would be restored without changing files."); rollback.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Move history JSONL file."); rollback.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    history = subparsers.add_parser("history", help="Inspect recorded sorting operations.", description="Show successful sorting operations recorded by apply."); history.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Move history JSONL file."); history.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     return parser
 
 
 def _analyze_one(path: Path):
     try: return analyze_image(path), None
-    except Exception as exc:
-        return None, exc
+    except Exception as exc: return None, exc
 
 
 def _analyze_many(images: list[Path], workers: int):
@@ -171,18 +136,13 @@ def _json_groups(groups, top=None):
 
 
 def _run_search(args, parser) -> int:
-    root = args.folder.expanduser()
-    cache_path = root / ".vibesorter" / "analysis.json"
-    if not cache_path.is_file():
-        parser.error(f"no analysis cache found at {cache_path}; run an incremental library analysis first")
+    root = args.folder.expanduser(); cache_path = root / ".vibesorter" / "analysis.json"
+    if not cache_path.is_file(): parser.error(f"no analysis cache found at {cache_path}; run an incremental library analysis first")
     query = ImageQuery(vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, path_contains=args.path_contains, min_brightness=args.min_brightness, max_brightness=args.max_brightness, min_saturation=args.min_saturation, max_saturation=args.max_saturation, min_contrast=args.min_contrast, max_contrast=args.max_contrast, limit=args.limit)
     results = search_cache(AnalysisCache(cache_path), query)
-    if args.json:
-        print(json.dumps({"count": len(results), "results": [{"path": str(r.path), "vibe": r.best.name, "score": round(r.best.score, 4), "text_likelihood": round(r.features.text_likelihood, 4), "brightness": round(r.features.brightness, 4), "saturation": round(r.features.saturation, 4), "contrast": round(r.features.contrast, 4)} for r in results]}, indent=2, ensure_ascii=False))
-        return 0
+    if args.json: print(json.dumps({"count": len(results), "results": [{"path": str(r.path), "vibe": r.best.name, "score": round(r.best.score, 4), "text_likelihood": round(r.features.text_likelihood, 4), "brightness": round(r.features.brightness, 4), "saturation": round(r.features.saturation, 4), "contrast": round(r.features.contrast, 4)} for r in results]}, indent=2, ensure_ascii=False)); return 0
     print(f"Found {len(results)} matching cached image(s).\n")
-    for result in results:
-        print(f"{result.best.name:<18} {result.best.score:>5.0%}  {result.path}")
+    for result in results: print(f"{result.best.name:<18} {result.best.score:>5.0%}  {result.path}")
     print("\nSearch is read-only; no images were analyzed, created, moved, copied, renamed, deleted, or modified.")
     return 0
 
@@ -190,13 +150,13 @@ def _run_search(args, parser) -> int:
 def _run_review(args, parser):
     try: data = json.loads(args.proposal.expanduser().read_text(encoding="utf-8")); proposal = proposal_from_dict(data)
     except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc: parser.error(f"invalid proposal: {exc}")
-    try:
-        accepted = parse_selection(args.accept, len(proposal.operations)); rejected = parse_selection(args.reject, len(proposal.operations))
+    try: accepted = parse_selection(args.accept, len(proposal.operations)); rejected = parse_selection(args.reject, len(proposal.operations))
     except ValueError as exc: parser.error(str(exc))
     reviewed = review_proposal(proposal, accept_ids=accepted, reject_ids=rejected, accept_vibes=set(args.accept_vibe), reject_vibes=set(args.reject_vibe))
     output = args.output or args.proposal.with_name(f"{args.proposal.stem}-reviewed.json")
-    output.write_text(proposal_to_json(reviewed), encoding="utf-8")
-    if args.json: print(proposal_to_json(reviewed))
+    try: output.write_text(reviewed_to_json(proposal, reviewed), encoding="utf-8")
+    except (OSError, ValueError) as exc: parser.error(f"could not write reviewed proposal: {exc}")
+    if args.json: print(reviewed_to_json(proposal, reviewed))
     else: print(f"Wrote reviewed proposal: {output}")
     return 0
 
@@ -216,10 +176,8 @@ def _run_scan(args, parser) -> int:
 
 
 def _run_preview(args, parser) -> int:
-    images = _load_images(args, parser)
-    groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood)
-    if args.json:
-        print(json.dumps({"count": len(results), "skipped": skipped, "groups": _json_groups(groups, args.top)}, indent=2, ensure_ascii=False))
+    images = _load_images(args, parser); groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood)
+    if args.json: print(json.dumps({"count": len(results), "skipped": skipped, "groups": _json_groups(groups, args.top)}, indent=2, ensure_ascii=False))
     else:
         print(f"\nAnalyzed {len(results)} image(s); skipped {skipped}.")
         for name, items in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
@@ -229,8 +187,7 @@ def _run_preview(args, parser) -> int:
 
 
 def _run_stats(args, parser) -> int:
-    images = _load_images(args, parser)
-    groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, show_progress=False)
+    images = _load_images(args, parser); groups, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, show_progress=False)
     payload = {"count": len(results), "skipped": skipped, "groups": _json_groups(groups)}
     if args.json: print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
@@ -245,16 +202,13 @@ def _run_analyze(args, parser) -> int:
     payload = {"path": str(result.path), "best": {"name": result.best.name, "score": round(result.best.score, 4)}, "text_likelihood": round(result.features.text_likelihood, 4), "scores": [{"name": score.name, "score": round(score.score, 4)} for score in result.scores]}
     if args.json: print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
-        print(f"Best vibe: {result.best.name} ({result.best.score:.0%})")
-        print(f"Text/screenshot likelihood: {result.features.text_likelihood:.0%}")
-        print("\nRanking:")
+        print(f"Best vibe: {result.best.name} ({result.best.score:.0%})"); print(f"Text/screenshot likelihood: {result.features.text_likelihood:.0%}"); print("\nRanking:")
         for score in result.scores: print(f"  {score.name:<20} {score.score:.0%}")
     return 0
 
 
 def _run_duplicates(args, parser) -> int:
-    images = _load_images(args, parser)
-    exact = find_exact_duplicates(images); near = find_near_duplicates(images, max_distance=args.max_distance)
+    images = _load_images(args, parser); exact = find_exact_duplicates(images); near = find_near_duplicates(images, max_distance=args.max_distance)
     payload = {"exact": [{"paths": [str(path) for path in group]} for group in exact.values()], "near": [{"left": str(left), "right": str(right), "distance": distance} for left, right, distance in near]}
     if args.json: print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
@@ -266,9 +220,7 @@ def _run_duplicates(args, parser) -> int:
 
 
 def _run_propose(args, parser) -> int:
-    images = _load_images(args, parser)
-    _, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood)
-    proposal = build_proposal(results, args.output_root)
+    images = _load_images(args, parser); _, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood); proposal = build_proposal(results, args.output_root)
     if args.output is not None: args.output.write_text(proposal_to_json(proposal), encoding="utf-8"); print(f"Wrote proposal: {args.output}")
     elif args.json: print(json.dumps(proposal_to_dict(proposal), indent=2, ensure_ascii=False))
     else: print(f"Proposed {len(proposal.operations)} move(s); skipped {skipped} image(s).")
@@ -279,10 +231,13 @@ def _run_apply(args, parser) -> int:
     if not args.confirm and not args.dry_run: parser.error("apply requires --confirm or --dry-run")
     try: data = json.loads(args.reviewed.expanduser().read_text(encoding="utf-8")); proposal = proposal_from_dict(data)
     except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc: parser.error(f"invalid reviewed proposal: {exc}")
-    accepted = [ReviewedOperation(item.id, item.source, item.destination, item.status) for item in proposal.operations if item.status == "accepted"]
-    results = apply_reviewed(accepted, confirm=args.confirm and not args.dry_run)
+    reviewed_data = data.get("review")
+    if not isinstance(reviewed_data, list): parser.error("invalid reviewed proposal: missing review decisions")
+    try: reviewed = tuple(ReviewedOperation(operation, next(item["status"] for item in reviewed_data if item.get("id") == operation.id)) for operation in proposal.operations)
+    except (KeyError, StopIteration) as exc: parser.error(f"invalid reviewed proposal: missing decision ({exc})")
+    results = apply_reviewed(reviewed, confirm=args.confirm and not args.dry_run)
     if args.confirm and not args.dry_run: record_batch(args.history, str(uuid4()), results)
-    if args.json: print(json.dumps(results, indent=2, ensure_ascii=False))
+    if args.json: print(json.dumps(results, indent=2, ensure_ascii=False, default=str))
     else: print(f"Applied {len(results)} operation(s).")
     return 0
 
@@ -305,40 +260,20 @@ def _run_history(args) -> int:
 
 
 def main() -> int:
-    parser = build_parser()
-    args = parser.parse_args()
-    if args.command == "scan":
-        return _run_scan(args, parser)
-    if args.command == "preview":
-        _validate_filters(args, parser)
-        return _run_preview(args, parser)
-    if args.command == "stats":
-        _validate_filters(args, parser)
-        return _run_stats(args, parser)
-    if args.command == "search":
-        _validate_filters(args, parser)
-        return _run_search(args, parser)
-    if args.command == "duplicates":
-        _validate_filters(args, parser)
-        return _run_duplicates(args, parser)
-    if args.command == "propose":
-        _validate_filters(args, parser)
-        return _run_propose(args, parser)
-    if args.command == "review":
-        return _run_review(args, parser)
-    if args.command == "gallery":
-        return _run_gallery(args, parser)
-    if args.command == "apply":
-        return _run_apply(args, parser)
-    if args.command == "rollback":
-        return _run_rollback(args, parser)
-    if args.command == "history":
-        return _run_history(args)
-    if args.command == "analyze":
-        return _run_analyze(args, parser)
-    parser.error(f"unknown command: {args.command}")
-    return 2
+    parser = build_parser(); args = parser.parse_args()
+    if args.command == "scan": return _run_scan(args, parser)
+    if args.command == "preview": _validate_filters(args, parser); return _run_preview(args, parser)
+    if args.command == "stats": _validate_filters(args, parser); return _run_stats(args, parser)
+    if args.command == "search": _validate_filters(args, parser); return _run_search(args, parser)
+    if args.command == "duplicates": _validate_filters(args, parser); return _run_duplicates(args, parser)
+    if args.command == "propose": _validate_filters(args, parser); return _run_propose(args, parser)
+    if args.command == "review": return _run_review(args, parser)
+    if args.command == "gallery": return _run_gallery(args, parser)
+    if args.command == "apply": return _run_apply(args, parser)
+    if args.command == "rollback": return _run_rollback(args, parser)
+    if args.command == "history": return _run_history(args)
+    if args.command == "analyze": return _run_analyze(args, parser)
+    parser.error(f"unknown command: {args.command}"); return 2
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__ == "__main__": raise SystemExit(main())
