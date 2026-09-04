@@ -24,11 +24,11 @@ from .search import ImageQuery, search_cache
 from .taxonomy import (
     ATTRIBUTE_CARDINALITY,
     ATTRIBUTE_FAMILIES,
+    TAXONOMY_VERSION,
     Brightness,
     Color,
     MediaType,
     Saturation,
-    TAXONOMY_VERSION,
     Temperature,
     Vibe,
 )
@@ -80,6 +80,5 @@ __all__ = [
     "load_labels",
     "save_annotation",
     "score_vibes",
-    "search_cache",
     "select_vibes",
 ]
