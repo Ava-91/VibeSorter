@@ -9,22 +9,13 @@ from pathlib import Path
 from uuid import uuid4
 
 from .cache import AnalysisCache
-from .duplicates import (
-    DEFAULT_MAX_DISTANCE,
-    find_exact_duplicates,
-    find_near_duplicates,
-)
+from .duplicates import DEFAULT_MAX_DISTANCE, find_exact_duplicates, find_near_duplicates
 from .gallery import gallery_from_file
 from .history import list_history, record_batch, rollback_batch
 from .operations import apply_reviewed
 from .pipeline import analyze_image
-from .proposal import (
-    build_proposal,
-    proposal_from_dict,
-    proposal_to_dict,
-    proposal_to_json,
-)
-from .review import ReviewedOperation, parse_selection, review_proposal, reviewed_to_json
+from .proposal import build_proposal, proposal_from_dict, proposal_to_dict, proposal_to_json
+from .review import parse_selection, review_proposal, reviewed_from_dict, reviewed_to_json
 from .scanner import find_images
 from .search import ImageQuery, search_cache
 from .vibes import VIBES
@@ -79,7 +70,7 @@ Read-only commands never modify your images. Filesystem changes require explicit
     propose = subparsers.add_parser("propose", help="Generate a safe folder organization proposal.", description="Create a deterministic JSON plan for sorting images by vibe. No files are moved."); _add_folder_argument(propose); _add_workers_argument(propose); _add_filter_arguments(propose); propose.add_argument("--output-root", type=Path, default=Path("VibeSorted"), help="Root folder proposed for organized images (default: VibeSorted)."); propose.add_argument("--output", type=Path, help="Write the proposal JSON to this path."); propose.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     review = subparsers.add_parser("review", help="Review a saved organization proposal.", description="Accept or reject proposed moves without touching the source images."); review.add_argument("proposal", type=Path, help="Proposal JSON produced by propose."); review.add_argument("--accept", default="", help="Accept operation IDs/ranges, e.g. 1,3-5 or all."); review.add_argument("--reject", default="", help="Reject operation IDs/ranges, e.g. 2,7-9 or all."); review.add_argument("--accept-vibe", action="append", default=[], help="Accept every operation for this vibe; repeatable."); review.add_argument("--reject-vibe", action="append", default=[], help="Reject every operation for this vibe; repeatable."); review.add_argument("--output", type=Path, help="Write the reviewed JSON to this path."); review.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     gallery = subparsers.add_parser("gallery", help="Build a local HTML image gallery.", description="Build an image-grid gallery from an existing proposal without re-analysis."); gallery.add_argument("proposal", type=Path, help="Proposal or reviewed proposal JSON."); gallery.add_argument("--output", type=Path, default=Path("vibesorter-gallery.html"), help="HTML output path (default: vibesorter-gallery.html).")
-    apply = subparsers.add_parser("apply", help="Apply accepted filesystem moves.", description="Apply only accepted operations from a reviewed proposal. Requires explicit --confirm unless using --dry-run."); apply.add_argument("reviewed", type=Path, help="Reviewed proposal JSON produced by review."); apply.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); apply.add_argument("--dry-run", action="store_true", help="Show what would move without changing files."); apply.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Where to record successful moves."); apply.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    apply = subparsers.add_parser("apply", help="Apply accepted filesystem moves.", description="Apply only accepted operations from a reviewed proposal. Requires explicit --confirm unless using --dry-run."); apply.add_argument("reviewed", type=Path, help="Reviewed proposal JSON produced by review."); apply.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); apply.add_argument("--dry-run", action="store_true", help="Show what would move without changing files."); apply.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Where to record successful moves."); apply.add_argument("--json", action="store_true", help="Print machine-readable results.")
     rollback = subparsers.add_parser("rollback", help="Undo a completed sorting batch.", description="Restore files from a recorded apply batch. Requires explicit --confirm unless using --dry-run."); rollback.add_argument("batch_id", help="Batch ID printed by apply."); rollback.add_argument("--confirm", action="store_true", help="Explicitly confirm filesystem changes."); rollback.add_argument("--dry-run", action="store_true", help="Check what would be restored without changing files."); rollback.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Move history JSONL file."); rollback.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     history = subparsers.add_parser("history", help="Inspect recorded sorting operations.", description="Show successful sorting operations recorded by apply."); history.add_argument("--history", type=Path, default=Path(".vibesorter/history.jsonl"), help="Move history JSONL file."); history.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     return parser
@@ -147,7 +138,7 @@ def _run_search(args, parser) -> int:
     return 0
 
 
-def _run_review(args, parser):
+def _run_review(args, parser) -> int:
     try: data = json.loads(args.proposal.expanduser().read_text(encoding="utf-8")); proposal = proposal_from_dict(data)
     except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc: parser.error(f"invalid proposal: {exc}")
     try: accepted = parse_selection(args.accept, len(proposal.operations)); rejected = parse_selection(args.reject, len(proposal.operations))
@@ -212,10 +203,8 @@ def _run_duplicates(args, parser) -> int:
     payload = {"exact": [{"paths": [str(path) for path in group]} for group in exact.values()], "near": [{"left": str(left), "right": str(right), "distance": distance} for left, right, distance in near]}
     if args.json: print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
-        print(f"Exact duplicate groups: {len(exact)}")
-        for group in exact.values(): print("  " + " = ".join(map(str, group)))
-        print(f"Near duplicate pairs: {len(near)}")
-        for left, right, distance in near: print(f"  {distance:>3}  {left} ~= {right}")
+        print(f"Exact duplicate groups: {len(exact)}"); [print("  " + " = ".join(map(str, group))) for group in exact.values()]
+        print(f"Near duplicate pairs: {len(near)}"); [print(f"  {distance:>3}  {left} ~= {right}") for left, right, distance in near]
     return 0
 
 
@@ -229,12 +218,12 @@ def _run_propose(args, parser) -> int:
 
 def _run_apply(args, parser) -> int:
     if not args.confirm and not args.dry_run: parser.error("apply requires --confirm or --dry-run")
-    try: data = json.loads(args.reviewed.expanduser().read_text(encoding="utf-8")); proposal = proposal_from_dict(data)
-    except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc: parser.error(f"invalid reviewed proposal: {exc}")
-    reviewed_data = data.get("review")
-    if not isinstance(reviewed_data, list): parser.error("invalid reviewed proposal: missing review decisions")
-    try: reviewed = tuple(ReviewedOperation(operation, next(item["status"] for item in reviewed_data if item.get("id") == operation.id)) for operation in proposal.operations)
-    except (KeyError, StopIteration) as exc: parser.error(f"invalid reviewed proposal: missing decision ({exc})")
+    try:
+        data = json.loads(args.reviewed.expanduser().read_text(encoding="utf-8"))
+        proposal_from_dict(data)
+        reviewed = reviewed_from_dict(data)
+    except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
+        parser.error(f"invalid reviewed proposal: {exc}")
     results = apply_reviewed(reviewed, confirm=args.confirm and not args.dry_run)
     if args.confirm and not args.dry_run: record_batch(args.history, str(uuid4()), results)
     if args.json: print(json.dumps(results, indent=2, ensure_ascii=False, default=str))
@@ -246,7 +235,7 @@ def _run_rollback(args, parser) -> int:
     if not args.confirm and not args.dry_run: parser.error("rollback requires --confirm or --dry-run")
     try: results = rollback_batch(args.history, args.batch_id, confirm=args.confirm and not args.dry_run)
     except (OSError, ValueError) as exc: parser.error(str(exc))
-    if args.json: print(json.dumps(results, indent=2, ensure_ascii=False))
+    if args.json: print(json.dumps(results, indent=2, ensure_ascii=False, default=str))
     else: print(f"Rolled back {len(results)} operation(s).")
     return 0
 
