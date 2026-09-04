@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from vibesorter.annotation import ImageAnnotation
 from vibesorter.features import ColorSample, ImageFeatures
 from vibesorter.learned_profile import LearnedProfileClassifier
