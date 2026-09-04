@@ -5,10 +5,10 @@ from vibesorter.evaluation import ConfidenceCalibrator, ConfidenceObservation
 
 def test_calibrator_maps_confidence_to_observed_accuracy() -> None:
     observations = (
-        ConfidenceObservation("Red / Warm", "Red / Warm", 0.22, True),
-        ConfidenceObservation("Red / Warm", "Blue", 0.28, False),
-        ConfidenceObservation("Dark / Moody", "Dark / Moody", 0.82, True),
-        ConfidenceObservation("Dark / Moody", "Blue", 0.88, False),
+        ConfidenceObservation("Red / Warm", "Red / Warm", 0.22, True, True),
+        ConfidenceObservation("Red / Warm", "Blue", 0.28, False, False),
+        ConfidenceObservation("Dark / Moody", "Dark / Moody", 0.82, True, True),
+        ConfidenceObservation("Dark / Moody", "Blue", 0.88, False, False),
     )
     calibrator = ConfidenceCalibrator(bins=2).fit(observations)
     assert calibrator.transform(0.25) == 0.5
