@@ -80,5 +80,6 @@ __all__ = [
     "load_labels",
     "save_annotation",
     "score_vibes",
+    "search_cache",
     "select_vibes",
 ]
