@@ -48,7 +48,7 @@ class ClassificationMetrics:
 def _metrics(labels: tuple[LabelledImage, ...], predictor) -> ClassificationMetrics:
     matrix = {actual: {predicted: 0 for predicted in VIBES} for actual in VIBES}
     for item in labels:
-        matrix[item.label][predictor(item).name] += 1
+        matrix[item.label][predictor(item.path).name] += 1
 
     total = sum(sum(row.values()) for row in matrix.values())
     correct = sum(matrix[vibe][vibe] for vibe in VIBES)
