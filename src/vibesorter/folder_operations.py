@@ -27,6 +27,7 @@ def review_folder_plan(
     accept_ids: set[int] | None = None,
     reject_ids: set[int] | None = None,
 ) -> tuple[FolderDecision, ...]:
+    """Turn a dry-run proposal into explicit pending/accepted/rejected decisions."""
     accepted = accept_ids or set()
     rejected = reject_ids or set()
     return tuple(
@@ -43,6 +44,7 @@ def review_folder_plan(
 
 
 def validate_folder_plan(decisions: tuple[FolderDecision, ...]) -> tuple[str, ...]:
+    """Return human-readable blockers without changing the filesystem."""
     blockers: list[str] = []
     destinations: set[Path] = set()
     for decision in decisions:
@@ -72,6 +74,7 @@ def apply_folder_plan(
     confirm: bool = False,
     journal_path: str | Path | None = None,
 ) -> tuple[AppliedMove, ...]:
+    """Apply only accepted, validated moves after explicit confirmation."""
     if not confirm:
         raise ValueError("filesystem changes require explicit confirmation")
     blockers = validate_folder_plan(decisions)
@@ -103,6 +106,7 @@ def apply_folder_plan(
 def rollback_moves(
     moves: tuple[AppliedMove, ...], *, confirm: bool = True
 ) -> tuple[AppliedMove, ...]:
+    """Restore applied moves in reverse order; never overwrite an existing source."""
     if not confirm:
         raise ValueError("rollback requires explicit confirmation")
     restored: list[AppliedMove] = []
@@ -110,9 +114,13 @@ def rollback_moves(
         source = Path(move.source)
         destination = Path(move.destination)
         if not destination.is_file():
-            raise ValueError(f"cannot rollback #{move.operation_id}: destination is missing")
+            raise ValueError(
+                f"cannot rollback #{move.operation_id}: destination is missing"
+            )
         if source.exists():
-            raise ValueError(f"cannot rollback #{move.operation_id}: original source exists")
+            raise ValueError(
+                f"cannot rollback #{move.operation_id}: original source exists"
+            )
         source.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(destination), str(source))
         restored.append(move)
