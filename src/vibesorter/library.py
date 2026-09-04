@@ -16,7 +16,7 @@ class LibraryAnalysisStats:
 def analyze_library(folder: str | Path, *, recursive: bool = False, cache_path: str | Path | None = None, on_progress: Callable[[int, int, Path, bool], None] | None = None) -> Iterator[AnalysisResult]:
     """Analyze a library while persisting results in the local SQLite index."""
     root = Path(folder).expanduser(); cache = AnalysisCache(cache_path or root / '.vibesorter' / 'analysis.db')
-    images = find_images(root, recursive=recursive); removed = cache.remove_missing(); total = len(images)
+    images = find_images(root, recursive=recursive); cache.remove_missing(); total = len(images)
     for index, image in enumerate(images, start=1):
         result = analyze_image(image, cache=cache)
         if on_progress is not None: on_progress(index, total, image, result.cached)
