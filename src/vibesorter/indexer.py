@@ -37,7 +37,7 @@ def index_folder(
         def analyze(path: Path):
             try:
                 return path, analyze_image(path), None
-            except Exception as exc:  # pragma: no cover - exact decoder errors vary by image  # noqa: BLE001
+            except Exception as exc:  # pragma: no cover - exact decoder errors vary by image
                 return path, None, exc
 
         with ThreadPoolExecutor(max_workers=workers) as executor:

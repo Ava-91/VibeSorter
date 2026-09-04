@@ -129,7 +129,7 @@ class ConfidenceCalibrator:
         self.bins = bins
         self._calibration = ()
 
-    def fit(self, observations: tuple[ConfidenceObservation, ...]) -> "ConfidenceCalibrator":
+    def fit(self, observations: tuple[ConfidenceObservation, ...]) -> ConfidenceCalibrator:
         width = 1.0 / self.bins
         fitted = []
         for index in range(self.bins):

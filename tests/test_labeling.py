@@ -6,7 +6,13 @@ import pytest
 
 from vibesorter.browser.labeling_ui import render_label_page
 from vibesorter.label_sampling import write_label_template
-from vibesorter.labeling import LabelCandidate, LabelSession, build_candidates, load_completed_labels, save_label
+from vibesorter.labeling import (
+    LabelCandidate,
+    LabelSession,
+    build_candidates,
+    load_completed_labels,
+    save_label,
+)
 from vibesorter.vibes import VibeScore
 
 

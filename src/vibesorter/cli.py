@@ -8,17 +8,26 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from uuid import uuid4
 
-from .duplicates import DEFAULT_MAX_DISTANCE, find_exact_duplicates, find_near_duplicates
+from .cache import AnalysisCache
+from .duplicates import (
+    DEFAULT_MAX_DISTANCE,
+    find_exact_duplicates,
+    find_near_duplicates,
+)
 from .gallery import gallery_from_file
 from .history import list_history, record_batch, rollback_batch
 from .operations import apply_reviewed
 from .pipeline import analyze_image
-from .proposal import build_proposal, proposal_from_dict, proposal_to_dict, proposal_to_json
+from .proposal import (
+    build_proposal,
+    proposal_from_dict,
+    proposal_to_dict,
+    proposal_to_json,
+)
 from .review import ReviewedOperation, parse_selection, review_proposal
 from .scanner import find_images
 from .search import ImageQuery, search_cache
-from .cache import AnalysisCache
-from .vibes import VIBES, confidence_score
+from .vibes import VIBES
 
 
 def _add_folder_argument(command: argparse.ArgumentParser) -> None:
@@ -112,7 +121,7 @@ Read-only commands never modify your images. Filesystem changes require explicit
 
 def _analyze_one(path: Path):
     try: return analyze_image(path), None
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return None, exc
 
 

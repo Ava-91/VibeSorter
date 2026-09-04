@@ -3,8 +3,8 @@ from __future__ import annotations
 import html
 import json
 
-from ..vibes import VIBES
 from ..labeling import LabelSession
+from ..vibes import VIBES
 
 
 def render_label_page(session: LabelSession) -> str:

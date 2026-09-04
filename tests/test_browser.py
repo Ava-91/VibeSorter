@@ -1,8 +1,14 @@
-from pathlib import Path
 import json
 import sqlite3
+from pathlib import Path
 
-from vibesorter.browser.server import _image_detail, _image_path, _query_rows, _rows, _vibe_summary
+from vibesorter.browser.server import (
+    _image_detail,
+    _image_path,
+    _query_rows,
+    _rows,
+    _vibe_summary,
+)
 from vibesorter.browser.ui import render_page
 
 

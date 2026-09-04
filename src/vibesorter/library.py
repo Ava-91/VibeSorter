@@ -8,6 +8,7 @@ from .cache import AnalysisCache
 from .pipeline import AnalysisResult, analyze_image
 from .scanner import find_images
 
+
 @dataclass(frozen=True, slots=True)
 class LibraryAnalysisStats:
     total: int; cached: int; analyzed: int; skipped: int; removed_from_cache: int

@@ -4,7 +4,12 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from vibesorter.duplicates import find_exact_duplicates, find_near_duplicates, hamming_distance, perceptual_hash
+from vibesorter.duplicates import (
+    find_exact_duplicates,
+    find_near_duplicates,
+    hamming_distance,
+    perceptual_hash,
+)
 
 
 def make_image(path: Path, color: tuple[int, int, int]) -> None:

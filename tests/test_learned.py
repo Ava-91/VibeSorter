@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from vibesorter.learned import LearnedClassifier, feature_vector
 from vibesorter.features import ImageFeatures
+from vibesorter.learned import LearnedClassifier, feature_vector
 from vibesorter.vibes import VIBES
 
 

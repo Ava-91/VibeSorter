@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-import vibesorter.entrypoint as entrypoint
+from vibesorter import entrypoint
 from vibesorter.benchmark import BenchmarkResult
 from vibesorter.evaluation import ClassificationMetrics, EvaluationReport
 from vibesorter.explain import Explanation

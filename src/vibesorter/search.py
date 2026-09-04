@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from .cache import AnalysisCache
-from .features import ImageFeatures
 from .pipeline import AnalysisResult
-from .vibes import VibeScore
+
 
 @dataclass(frozen=True, slots=True)
 class ImageQuery:

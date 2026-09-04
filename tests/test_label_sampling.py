@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from vibesorter.label_sampling import sample_image_paths, sample_labels, write_label_template
+from vibesorter.label_sampling import (
+    sample_image_paths,
+    sample_labels,
+    write_label_template,
+)
 
 
 def _make_images(folder: Path, count: int) -> list[Path]:

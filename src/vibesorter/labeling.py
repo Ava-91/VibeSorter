@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .indexer import index_folder
-from .vibes import VIBES, confidence_score, is_confident, VibeScore
+from .vibes import VIBES, VibeScore, confidence_score, is_confident
 
 
 @dataclass(frozen=True, slots=True)
