@@ -34,11 +34,7 @@ def build_attribute_proposal(
     *,
     primary_attribute: str = "media_type",
 ) -> MoveProposal:
-    """Build a deterministic, read-only folder plan from image profiles.
-
-    Only the chosen primary attribute creates physical folders. All secondary
-    attributes remain metadata, avoiding duplicate copies for multi-label data.
-    """
+    """Build a deterministic, read-only folder plan from image profiles."""
     if primary_attribute not in FOLDERABLE_FAMILIES:
         raise ValueError(f"unknown folder attribute: {primary_attribute}")
     root = Path(output_root)
@@ -57,15 +53,18 @@ def build_attribute_proposal(
             key = destination.as_posix().casefold()
             counter += 1
         used.add(key)
-        operations.append(MoveOperation(
-            id=index,
-            source=str(result.path),
-            destination=str(destination),
-            vibe=folder,
-            score=round(_folder_confidence(profile), 6),
-            confidence=round(_folder_confidence(profile), 6),
-            text_likelihood=round(result.features.text_likelihood, 6),
-        ))
+        confidence = _folder_confidence(profile)
+        operations.append(
+            MoveOperation(
+                id=index,
+                source=str(result.path),
+                destination=str(destination),
+                vibe=folder,
+                score=round(confidence, 6),
+                confidence=round(confidence, 6),
+                text_likelihood=round(result.features.text_likelihood, 6),
+            )
+        )
     return MoveProposal(version=2, output_root=str(root), operations=tuple(operations))
 
 
@@ -73,6 +72,4 @@ def _folder_confidence(profile: ImageProfile | None) -> float:
     if profile is None:
         return 0.0
     value = profile.media_type
-    if value is not None:
-        return value.confidence
-    return 0.0
+    return value.confidence if value is not None else 0.0
