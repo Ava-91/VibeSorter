@@ -12,6 +12,12 @@ license = {file = "LICENSE"}
 authors = [{name = "Ava"}]
 dependencies = ["Pillow>=10.0"]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
 [project.scripts]
 vibesorter = "vibesorter.entrypoint:main"
 vibesorter-browser = "vibesorter.browser.server:main"
