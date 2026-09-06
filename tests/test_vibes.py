@@ -6,7 +6,14 @@ from PIL import Image
 
 from vibesorter.features import ImageFeatures, extract_features
 from vibesorter.taxonomy import Vibe
-from vibesorter.vibes import VibeScore, classify, confidence_score, is_confident, score_vibe_contributions, score_vibes
+from vibesorter.vibes import (
+    VibeScore,
+    classify,
+    confidence_score,
+    is_confident,
+    score_vibe_contributions,
+    score_vibes,
+)
 
 
 def make_image(path: Path, color: tuple[int, int, int]) -> None:
