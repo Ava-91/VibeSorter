@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,25 +30,68 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _rollback_results(results: list[MoveResult]) -> None:
+    """Restore freshly moved files if durable history cannot be committed."""
+    failures: list[str] = []
+    for result in reversed(results):
+        if result.status != "moved":
+            continue
+        if not result.destination.is_file():
+            failures.append(f"#{result.operation_id}: destination is missing")
+            continue
+        if result.source.exists():
+            failures.append(f"#{result.operation_id}: source path is occupied")
+            continue
+        try:
+            result.source.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(result.destination), str(result.source))
+        except OSError as exc:
+            failures.append(f"#{result.operation_id}: {exc}")
+    if failures:
+        raise OSError("history commit failed and rollback was incomplete: " + "; ".join(failures))
+
+
 def record_batch(batch_id: str, results: tuple[MoveResult, ...], history_path: Path) -> int:
-    """Append successful moves to an auditable JSONL history file."""
+    """Atomically append successful moves to an auditable JSONL history file."""
     moved = [result for result in results if result.status == "moved"]
     if not moved:
         return 0
+
     history_path = history_path.expanduser()
     history_path.parent.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).isoformat()
-    with history_path.open("a", encoding="utf-8") as handle:
-        for result in moved:
-            handle.write(json.dumps({
-                "event": "move",
-                "batch_id": batch_id,
-                "operation_id": result.operation_id,
-                "source": str(result.source),
-                "destination": str(result.destination),
-                "sha256": _sha256(result.destination),
-                "timestamp": timestamp,
-            }, ensure_ascii=False) + "\n")
+    records = [
+        {
+            "event": "move",
+            "batch_id": batch_id,
+            "operation_id": result.operation_id,
+            "source": str(result.source),
+            "destination": str(result.destination),
+            "sha256": _sha256(result.destination),
+            "timestamp": timestamp,
+        }
+        for result in moved
+    ]
+
+    try:
+        existing = history_path.read_bytes() if history_path.exists() else b""
+        payload = existing + b"".join(
+            (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8") for record in records
+        )
+        fd, temp_name = tempfile.mkstemp(prefix=f".{history_path.name}.", suffix=".tmp", dir=history_path.parent)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, history_path)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
+    except (OSError, TypeError, ValueError):
+        _rollback_results(moved)
+        raise
+
     return len(moved)
 
 
@@ -60,7 +105,16 @@ def load_batch(history_path: Path, batch_id: str) -> tuple[HistoryRecord, ...]:
             continue
         item = json.loads(line)
         if item.get("event") == "move" and item.get("batch_id") == batch_id:
-            records.append(HistoryRecord(batch_id, int(item["operation_id"]), item["source"], item["destination"], item["sha256"], item["timestamp"]))
+            records.append(
+                HistoryRecord(
+                    batch_id,
+                    int(item["operation_id"]),
+                    item["source"],
+                    item["destination"],
+                    item["sha256"],
+                    item["timestamp"],
+                )
+            )
     if not records:
         raise ValueError(f"batch not found: {batch_id}")
     return tuple(sorted(records, key=lambda record: record.operation_id, reverse=True))
