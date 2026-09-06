@@ -34,7 +34,6 @@ def _score_components(features: ImageFeatures) -> dict[str, dict[str, float]]:
     gray = features.grayscale_ratio
     text = features.text_likelihood
     blue = features.average_rgb[2] / 255.0
-    green = features.average_rgb[1] / 255.0
     red = features.average_rgb[0] / 255.0
     regional_cool = max((region.cool_ratio for region in features.regions), default=cool)
 
