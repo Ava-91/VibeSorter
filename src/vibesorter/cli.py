@@ -251,21 +251,44 @@ def _run_propose(args, parser) -> int:
 
 
 def _run_apply(args, parser) -> int:
-    if not args.confirm and not args.dry_run: parser.error("apply requires --confirm or --dry-run")
+    if not args.confirm and not args.dry_run:
+        parser.error("apply requires --confirm or --dry-run")
     try:
         data = json.loads(args.reviewed.expanduser().read_text(encoding="utf-8"))
         proposal_from_dict(data)
         reviewed = reviewed_from_dict(data)
     except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
         parser.error(f"invalid reviewed proposal: {exc}")
+
     results = apply_reviewed(
         reviewed,
         confirm=args.confirm and not args.dry_run,
         dry_run=args.dry_run,
     )
-    if args.confirm and not args.dry_run: record_batch(str(uuid4()), results, args.history)
-    if args.json: print(json.dumps(results, indent=2, ensure_ascii=False, default=str))
-    else: print(f"Applied {len(results)} operation(s).")
+    moved = tuple(result for result in results if result.status == "moved")
+    batch_id = None
+    if args.confirm and not args.dry_run and moved:
+        batch_id = str(uuid4())
+        try:
+            record_batch(batch_id, results, args.history)
+        except OSError as exc:
+            parser.error(f"apply was rolled back because history could not be recorded: {exc}")
+
+    if args.json:
+        payload = {
+            "batch_id": batch_id,
+            "moved": len(moved),
+            "results": results,
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+    else:
+        counts = {status: sum(result.status == status for result in results) for status in {result.status for result in results}}
+        summary = ", ".join(f"{status}={count}" for status, count in sorted(counts.items())) or "no operations"
+        print(f"Apply result: {summary}.")
+        if batch_id is not None:
+            print(f"Batch ID: {batch_id}")
+        elif args.confirm and not args.dry_run:
+            print("No filesystem changes were made.")
     return 0
 
 
