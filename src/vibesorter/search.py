@@ -22,7 +22,7 @@ class ImageQuery:
     min_contrast: float | None = None
     max_contrast: float | None = None
     limit: int | None = None
-    include_secondary_vibes: bool = True
+    include_secondary_vibes: bool = False
     media_type: str | None = None
     colors: tuple[str, ...] = field(default_factory=tuple)
     temperature: str | None = None
