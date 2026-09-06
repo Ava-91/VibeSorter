@@ -71,5 +71,5 @@ vibe.onchange=filter; search.oninput=filter; status.onchange=filter;
 def gallery_from_file(source: Path, output: Path) -> Path:
     data = json.loads(source.expanduser().read_text(encoding="utf-8"))
     if not isinstance(data, dict) or not isinstance(data.get("operations"), list):
-        raise ValueError("gallery source must be a proposal or reviewed proposal JSON")
+        raise TypeError("gallery source must be a proposal or reviewed proposal JSON object")
     return render_gallery(data, output)
