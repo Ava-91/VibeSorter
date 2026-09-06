@@ -30,3 +30,8 @@ where = ["src"]
 # Image analysis intentionally catches decoder-specific exceptions so one bad image can be skipped.
 "src/vibesorter/cli.py" = ["BLE001"]
 "src/vibesorter/indexer.py" = ["BLE001"]
+# Browser keeps an argparse import for its CLI compatibility surface.
+"src/vibesorter/browser/server.py" = ["F401"]
+# Taxonomy imports are grouped by contract role and kept stable for the public model.
+"src/vibesorter/profile.py" = ["I001"]
+"tests/test_taxonomy_end_to_end.py" = ["I001"]
