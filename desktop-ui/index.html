@@ -86,11 +86,13 @@ listen("analysis-output", (event) => {
 listen("analysis-error", (event) => {
   setStatus("Analysis error:\n" + event.payload);
   setRunning(false);
+  choose.disabled = false;
 });
 
 listen("analysis-failed", (event) => {
   setStatus("Analysis failed" + (event.payload ? " (exit code " + event.payload + ")." : "."));
   setRunning(false);
+  choose.disabled = false;
 });
 
 listen("analysis-cancelled", () => {
@@ -120,14 +122,16 @@ choose.addEventListener("click", async () => {
 analyze.addEventListener("click", async () => {
   if (!folder || analysisRunning) return;
   setRunning(true);
-  setStatus("Starting local analysis…");
+  choose.disabled = true;
+  setStatus("Starting local VibeSorter backend…");
 
   try {
-    browserUrl = await invoke("start_backend", { folder, port: 8765 });
+    browserUrl = await invoke("start_backend", { folder, port: 0 });
     await invoke("index_folder", { folder });
     setStatus("Analyzing locally… You can cancel safely at any time.");
   } catch (error) {
     setStatus("Could not start VibeSorter:\n" + error);
+    choose.disabled = false;
     setRunning(false);
   }
 });
