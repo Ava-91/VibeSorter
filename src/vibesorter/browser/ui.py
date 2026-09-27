@@ -15,7 +15,7 @@ def render_page(rows: list[dict] | None = None, vibe: str | None = None, query: 
 <div class='layout'><aside class='sidebar'><div id='filters'>Loading filters…</div></aside><main>
 <form id='search'><input id='query' type='text' placeholder='Search paths...' value='{html.escape(query or '', quote=True)}'><button type='submit'>Apply filters</button><button id='clear' type='button'>Clear</button></form>
 <div class='toolbar'><span id='summary'>Loading…</span><button id='more' type='button' hidden>Load more</button></div><section id='grid' class='grid'>{initial}</section><div id='empty' class='empty' hidden>No cached analysis matched these filters.</div></main></div>
-<div id='modal' class='modal' hidden><section class='dialog'><button id='close' class='close'>Close</button><div id='detail'></div></section></div>
+<div id='modal' class='modal' hidden role='dialog' aria-modal='true' aria-labelledby='detail-title'><section class='dialog' tabindex='-1'><button id='close' class='close' aria-label='Close image details'>Close</button><div id='detail'></div></section></div>
 <script>
 const families=['media_type','colors','temperature','saturation','brightness','vibes'];const labels={{media_type:'Media type',colors:'Color',temperature:'Temperature',saturation:'Saturation',brightness:'Brightness',vibes:'Vibes'}};let page=1,total=0,limit=48;
 const esc=v=>String(v??'').replace(/[&<>\"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}}[c]));
