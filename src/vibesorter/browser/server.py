@@ -139,7 +139,9 @@ def _query_rows(
                 parsed = _parse_scores(item.get(columns.get("scores", ""))) if columns.get("scores") else ()
                 if not any(score.name.casefold() == vibe for score in parsed):
                     continue
-            if not _profile_matches(_profile_for(conn, item["path"]), params):
+            profile = _profile_for(conn, item["path"])
+            item["profile"] = profile.to_dict() if profile else None
+            if not _profile_matches(profile, params):
                 continue
             matches.append(item)
         total = len(matches)
