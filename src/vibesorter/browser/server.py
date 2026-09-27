@@ -158,6 +158,7 @@ def _query_rows(
                 if not any(score.name.casefold() == vibe for score in parsed):
                     continue
             profile = _profile_for(conn, item["path"])
+            item["profile"] = profile.to_dict() if profile else None
             if not _profile_matches(profile, params):
                 continue
             item["profile"] = profile.to_dict() if profile else None
