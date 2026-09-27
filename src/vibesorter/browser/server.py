@@ -159,8 +159,6 @@ def _query_rows(
             item["profile"] = profile.to_dict() if profile else None
             matches.append(item)
         return matches[offset : offset + limit], len(matches)
-        total = len(matches)
-        return matches[offset : offset + limit], total
 
 
 def _rows(db_path: Path, vibe: str | None, query: str | None) -> list[dict]:
