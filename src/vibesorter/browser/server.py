@@ -127,21 +127,38 @@ def _query_rows(
         table, columns = _table_info(conn)
         if not table or not columns.get("path"):
             return [], 0
-        rows = conn.execute(f"SELECT * FROM {table} ORDER BY {columns['path']} COLLATE NOCASE").fetchall()
         query_text = (params.get("q", [""])[0] or "").casefold()
         vibe = (params.get("vibe", [""])[0] or "").casefold()
+        select_columns = [columns["path"]]
+        for name in ("vibe", "confidence", "scores"):
+            if columns.get(name) and columns[name] not in select_columns:
+                select_columns.append(columns[name])
+        where = []
+        values: list[str] = []
+        if query_text:
+            where.append(f"LOWER({columns['path']}) LIKE ?")
+            values.append(f"%{query_text}%")
+        if vibe and columns.get("vibe"):
+            where.append(f"LOWER({columns['vibe']}) = ?")
+            values.append(vibe)
+        sql = f"SELECT {', '.join(select_columns)} FROM {table}"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += f" ORDER BY {columns['path']} COLLATE NOCASE"
+        rows = conn.execute(sql, values).fetchall()
         matches: list[dict] = []
         for row in rows:
             item = _normalize_row(row, columns)
-            if query_text and query_text not in item["path"].casefold():
-                continue
             if vibe and str(item.get("vibe") or "").casefold() != vibe:
                 parsed = _parse_scores(item.get(columns.get("scores", ""))) if columns.get("scores") else ()
                 if not any(score.name.casefold() == vibe for score in parsed):
                     continue
-            if not _profile_matches(_profile_for(conn, item["path"]), params):
+            profile = _profile_for(conn, item["path"])
+            if not _profile_matches(profile, params):
                 continue
+            item["profile"] = profile.to_dict() if profile else None
             matches.append(item)
+        return matches[offset : offset + limit], len(matches)
         total = len(matches)
         return matches[offset : offset + limit], total
 
