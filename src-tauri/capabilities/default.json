@@ -15,15 +15,6 @@
           "args": true
         }
       ]
-    },
-    {
-      "identifier": "shell:allow-kill",
-      "allow": [
-        {
-          "name": "binaries/vibesorter-sidecar",
-          "sidecar": true
-        }
-      ]
     }
   ]
 }
