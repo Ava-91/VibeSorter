@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VibeSorter",
+  "version": "0.8.1",
+  "identifier": "com.ava91.vibesorter",
+  "build": {
+    "frontendDist": "../desktop-ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "VibeSorter",
+        "width": 1100,
+        "height": 760,
+        "minWidth": 820,
+        "minHeight": 600,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:*; img-src 'self' data: http://127.0.0.1:*; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi", "dmg", "app", "deb", "appimage"],
+    "externalBin": ["binaries/vibesorter-sidecar"]
+  }
+}
