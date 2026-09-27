@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>VibeSorter</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,Segoe UI,system-ui,sans-serif;background:#0d0e12;color:#f4f5f7}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 10%,#20243a 0,#0d0e12 45%)}
+    main{width:min(760px,calc(100% - 48px));padding:42px;border:1px solid #2b3040;border-radius:24px;background:#12151d;box-shadow:0 24px 80px #0008}
+    .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#7f8cff}
+    h1{font-size:42px;margin:8px 0}
+    p{color:#aeb3c2;line-height:1.6}
+    .actions{display:flex;gap:12px;flex-wrap:wrap;margin:28px 0}
+    button{border:1px solid #343b52;background:#1a1f2c;color:#fff;border-radius:12px;padding:12px 16px;font:inherit;cursor:pointer}
+    button.primary{background:#5968e8;border-color:#5968e8}
+    button.danger{border-color:#6f3341}
+    button:disabled{opacity:.5;cursor:wait}
+    .path{padding:12px 14px;border-radius:10px;background:#0d1017;color:#cbd0dc;word-break:break-all;min-height:42px}
+    .status{margin-top:18px;padding:14px;border:1px solid #292e3d;border-radius:12px;color:#aeb3c2;white-space:pre-wrap;min-height:72px}
+    .privacy{font-size:13px}
+    .privacy strong{color:#d8dcff}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Local-first desktop</div>
+  <h1>VibeSorter</h1>
+  <p>Analyze and browse your image library without sending source images to a cloud service.</p>
+
+  <div class="actions">
+    <button id="choose" class="primary">Choose image folder</button>
+    <button id="analyze" disabled>Analyze folder</button>
+    <button id="cancel" class="danger hidden">Cancel analysis</button>
+  </div>
+
+  <div id="path" class="path">No folder selected.</div>
+  <div id="status" class="status">Ready.</div>
+  <p class="privacy"><strong>Privacy:</strong> images and analysis stay on this device. VibeSorter does not upload your library to a third-party AI service.</p>
+</main>
+
+<script>
+const tauri = window.__TAURI__;
+const { invoke } = tauri.core;
+const { listen } = tauri.event;
+
+let folder = null;
+let browserUrl = null;
+let analysisRunning = false;
+
+const choose = document.getElementById("choose");
+const analyze = document.getElementById("analyze");
+const cancel = document.getElementById("cancel");
+const path = document.getElementById("path");
+const status = document.getElementById("status");
+
+function setStatus(message){ status.textContent = message; }
+
+function setRunning(running){
+  analysisRunning = running;
+  choose.disabled = running;
+  analyze.disabled = running || !folder;
+  cancel.classList.toggle("hidden", !running);
+}
+
+async function openBrowser(){
+  if (!browserUrl) return;
+  setStatus("Analysis complete. Opening the local browser…");
+  window.location.href = browserUrl;
+}
+
+listen("analysis-output", (event) => {
+  try {
+    const result = JSON.parse(event.payload);
+    setStatus(
+      "Analysis complete. " +
+      `Analyzed: ${result.analyzed ?? 0} · Reused: ${result.reused ?? 0} · Skipped: ${result.skipped ?? 0}`
+    );
+  } catch {
+    setStatus("Analysis is still running locally…");
+  }
+});
+
+listen("analysis-error", (event) => {
+  setStatus("Analysis error:\n" + event.payload);
+  setRunning(false);
+});
+
+listen("analysis-failed", (event) => {
+  setStatus("Analysis failed" + (event.payload ? " (exit code " + event.payload + ")." : "."));
+  setRunning(false);
+});
+
+listen("analysis-cancelled", () => {
+  setStatus("Analysis cancelled. No cloud upload occurred.");
+  setRunning(false);
+});
+
+listen("analysis-finished", async () => {
+  setRunning(false);
+  await new Promise(resolve => setTimeout(resolve, 350));
+  await openBrowser();
+});
+
+choose.addEventListener("click", async () => {
+  try {
+    const selected = await invoke("choose_folder");
+    if (!selected) return;
+    folder = selected;
+    path.textContent = folder;
+    analyze.disabled = false;
+    setStatus("Folder selected. Start local analysis when ready.");
+  } catch (error) {
+    setStatus("Could not choose a folder: " + error);
+  }
+});
+
+analyze.addEventListener("click", async () => {
+  if (!folder || analysisRunning) return;
+  setRunning(true);
+  setStatus("Starting local analysis…");
+
+  try {
+    browserUrl = await invoke("start_backend", { folder, port: 8765 });
+    await invoke("index_folder", { folder });
+    setStatus("Analyzing locally… You can cancel safely at any time.");
+  } catch (error) {
+    setStatus("Could not start VibeSorter:\n" + error);
+    setRunning(false);
+  }
+});
+
+cancel.addEventListener("click", async () => {
+  if (!analysisRunning) return;
+  cancel.disabled = true;
+  setStatus("Cancelling local analysis…");
+  try {
+    await invoke("cancel_index");
+  } catch (error) {
+    setStatus("Could not cancel analysis: " + error);
+    cancel.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

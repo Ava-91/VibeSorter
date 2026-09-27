@@ -102,21 +102,38 @@ Or choose the database, host, and port explicitly:
 vibesorter browser --db "path/to/photos/.vibesorter/analysis.db" --host 127.0.0.1 --port 8765
 ```
 
-### Desktop shell
+### Desktop app
 
-Launch the local desktop shell around the browser interface:
+The desktop application uses **Tauri 2 + Rust** for the native shell while keeping the existing Python classifier, indexer, and SQLite browser as the source of truth.
 
-```bash
-vibesorter-desktop
+For development, build the Tauri app from the repository root after installing the Tauri prerequisites for your platform:
+
+```text
+Rust toolchain
+Python 3.10+
+PyInstaller
+Tauri 2 CLI
 ```
 
-Or:
+Build the Python sidecar first:
 
-```bash
-vibesorter desktop --db "path/to/photos/.vibesorter/analysis.db" --port 8765
+```powershell
+python -m pip install -e .
+python -m pip install pyinstaller
+python scripts/build_sidecar.py
 ```
 
-All interfaces are local-first. They do not upload source images to a third-party AI service.
+Then build the desktop application:
+
+```powershell
+cargo tauri build
+```
+
+The resulting installer/bundle is produced under `src-tauri/target/release/bundle/`. The GitHub Actions desktop workflow builds Windows, Linux, and macOS artifacts from the same sidecar + Tauri configuration.
+
+The legacy `vibesorter desktop` command remains available as a browser compatibility mode for environments where the native app is not installed.
+
+All interfaces are local-first. The native desktop shell does not upload source images to a third-party AI service.
 
 ## Full CLI workflow
 
