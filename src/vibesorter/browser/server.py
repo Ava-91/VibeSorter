@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import io
 import json
 import mimetypes
 import sqlite3
@@ -8,6 +10,8 @@ from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
+
+from PIL import Image
 
 from ..profile import ImageProfile
 from ..taxonomy import (
@@ -127,14 +131,28 @@ def _query_rows(
         table, columns = _table_info(conn)
         if not table or not columns.get("path"):
             return [], 0
-        rows = conn.execute(f"SELECT * FROM {table} ORDER BY {columns['path']} COLLATE NOCASE").fetchall()
         query_text = (params.get("q", [""])[0] or "").casefold()
         vibe = (params.get("vibe", [""])[0] or "").casefold()
+        select_columns = [columns["path"]]
+        for name in ("vibe", "confidence", "scores"):
+            if columns.get(name) and columns[name] not in select_columns:
+                select_columns.append(columns[name])
+        where = []
+        values: list[str] = []
+        if query_text:
+            where.append(f"LOWER({columns['path']}) LIKE ?")
+            values.append(f"%{query_text}%")
+        if vibe and columns.get("vibe"):
+            where.append(f"LOWER({columns['vibe']}) = ?")
+            values.append(vibe)
+        sql = f"SELECT {', '.join(select_columns)} FROM {table}"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += f" ORDER BY {columns['path']} COLLATE NOCASE"
+        rows = conn.execute(sql, values).fetchall()
         matches: list[dict] = []
         for row in rows:
             item = _normalize_row(row, columns)
-            if query_text and query_text not in item["path"].casefold():
-                continue
             if vibe and str(item.get("vibe") or "").casefold() != vibe:
                 parsed = _parse_scores(item.get(columns.get("scores", ""))) if columns.get("scores") else ()
                 if not any(score.name.casefold() == vibe for score in parsed):
@@ -143,9 +161,9 @@ def _query_rows(
             item["profile"] = profile.to_dict() if profile else None
             if not _profile_matches(profile, params):
                 continue
+            item["profile"] = profile.to_dict() if profile else None
             matches.append(item)
-        total = len(matches)
-        return matches[offset : offset + limit], total
+        return matches[offset : offset + limit], len(matches)
 
 
 def _rows(db_path: Path, vibe: str | None, query: str | None) -> list[dict]:
@@ -205,6 +223,21 @@ def _image_detail(db_path: Path, requested: str) -> dict | None:
                 pass
         profile = _profile_for(conn, item["path"])
         return {"path": item["path"], "vibe": item.get("vibe"), "confidence": float(item["confidence"]) if isinstance(item.get("confidence"), (int, float)) else (confidence_score(scores) if scores else 0.0), "ambiguous": not is_confident(scores) if scores else None, "scores": [{"name": s.name, "score": s.score} for s in scores], "profile": profile.to_dict() if profile else None, "features": features, "file": {"exists": path.is_file(), "size": path.stat().st_size if path.is_file() else None}}
+
+
+def _thumbnail_path(image: Path, cache_root: Path, size: int = 480) -> Path:
+    stat = image.stat()
+    key = hashlib.sha256(f"{image.resolve()}:{stat.st_mtime_ns}:{stat.st_size}:{size}".encode()).hexdigest()
+    target = cache_root / f"{key}.jpg"
+    if not target.exists():
+        cache_root.mkdir(parents=True, exist_ok=True)
+        with Image.open(image) as source:
+            source.thumbnail((size, size))
+            converted = source.convert("RGB")
+            temporary = target.with_suffix(".tmp")
+            converted.save(temporary, format="JPEG", quality=82, optimize=True)
+            temporary.replace(target)
+    return target
 
 
 def _image_path(db_path: Path, requested: str) -> Path | None:
@@ -283,6 +316,17 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
                 safe_limit = min(max(1, limit), MAX_LIMIT)
                 rows, total = _query_rows(db, params, limit=safe_limit, offset=(page - 1) * safe_limit)
                 self._json(200, {"items": rows, "page": page, "limit": safe_limit, "total": total})
+                return
+            if parsed.path == "/api/thumbnail":
+                image = _image_path(db, unquote(params.get("path", [""])[0]))
+                if image is None:
+                    self._send(404, "Image not found", "text/plain; charset=utf-8")
+                else:
+                    try:
+                        thumbnail = _thumbnail_path(image, db.parent / "thumbnails")
+                        self._send_bytes(200, thumbnail.read_bytes(), "image/jpeg")
+                    except (OSError, ValueError):
+                        self._send(500, "Could not create thumbnail", "text/plain; charset=utf-8")
                 return
             if parsed.path == "/api/image":
                 image = _image_path(db, unquote(params.get("path", [""])[0]))

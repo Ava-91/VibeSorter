@@ -6,7 +6,7 @@ import os
 import shutil
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .operations import MoveResult
@@ -59,7 +59,7 @@ def record_batch(batch_id: str, results: tuple[MoveResult, ...], history_path: P
 
     history_path = history_path.expanduser()
     history_path.parent.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     records = [
         {
             "event": "move",
