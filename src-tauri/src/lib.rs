@@ -1,4 +1,4 @@
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -22,6 +22,15 @@ async fn choose_folder(app: tauri::AppHandle) -> Result<Option<String>, String> 
 
 #[tauri::command]
 async fn start_backend(app: tauri::AppHandle, folder: String, port: u16) -> Result<String, String> {
+    let port = if port == 0 {
+        TcpListener::bind(("127.0.0.1", 0))
+            .and_then(|listener| listener.local_addr())
+            .map(|address| address.port())
+            .map_err(|error| format!("Could not reserve a local browser port: {error}"))?
+    } else {
+        port
+    };
+
     let db = std::path::Path::new(&folder)
         .join(".vibesorter")
         .join("analysis.db");
