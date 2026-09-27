@@ -25,6 +25,7 @@
   },
   "bundle": {
     "active": true,
+    "icon": [],
     "targets": ["nsis", "msi", "dmg", "app", "deb", "appimage"],
     "externalBin": ["binaries/vibesorter-sidecar"]
   }
