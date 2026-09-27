@@ -15,7 +15,7 @@ def test_browser_profile_filter_matches_persisted_profile(tmp_path: Path):
         conn.execute("CREATE TABLE profiles (path TEXT PRIMARY KEY, taxonomy_version TEXT, profile TEXT)")
         profile = ImageProfile(colors=(AttributeValue("blue", 0.9),)).to_json()
         conn.execute("INSERT INTO images VALUES (?, ?, ?, ?, ?)", ("blue.png", 1, 1, "{}", json.dumps([])))
-        conn.execute("INSERT INTO profiles VALUES (?, ?, ?)", ("blue.png", "1", profile))
+        conn.execute("INSERT INTO profiles VALUES (?, ?, ?)", ("blue.png", "2.0", profile))
         conn.commit()
     rows, total = _query_rows(db, {"colors": ["blue"]}, limit=10, offset=0)
     assert total == 1
