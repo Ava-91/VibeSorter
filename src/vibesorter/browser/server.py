@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import io
 import json
 import mimetypes
 import sqlite3
@@ -8,6 +10,8 @@ from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
+
+from PIL import Image
 
 from ..profile import ImageProfile
 from ..taxonomy import (
@@ -205,6 +209,21 @@ def _image_detail(db_path: Path, requested: str) -> dict | None:
         return {"path": item["path"], "vibe": item.get("vibe"), "confidence": float(item["confidence"]) if isinstance(item.get("confidence"), (int, float)) else (confidence_score(scores) if scores else 0.0), "ambiguous": not is_confident(scores) if scores else None, "scores": [{"name": s.name, "score": s.score} for s in scores], "profile": profile.to_dict() if profile else None, "features": features, "file": {"exists": path.is_file(), "size": path.stat().st_size if path.is_file() else None}}
 
 
+def _thumbnail_path(image: Path, cache_root: Path, size: int = 480) -> Path:
+    stat = image.stat()
+    key = hashlib.sha256(f"{image.resolve()}:{stat.st_mtime_ns}:{stat.st_size}:{size}".encode()).hexdigest()
+    target = cache_root / f"{key}.jpg"
+    if not target.exists():
+        cache_root.mkdir(parents=True, exist_ok=True)
+        with Image.open(image) as source:
+            source.thumbnail((size, size))
+            converted = source.convert("RGB")
+            temporary = target.with_suffix(".tmp")
+            converted.save(temporary, format="JPEG", quality=82, optimize=True)
+            temporary.replace(target)
+    return target
+
+
 def _image_path(db_path: Path, requested: str) -> Path | None:
     if not db_path.exists():
         return None
@@ -281,6 +300,17 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
                 safe_limit = min(max(1, limit), MAX_LIMIT)
                 rows, total = _query_rows(db, params, limit=safe_limit, offset=(page - 1) * safe_limit)
                 self._json(200, {"items": rows, "page": page, "limit": safe_limit, "total": total})
+                return
+            if parsed.path == "/api/thumbnail":
+                image = _image_path(db, unquote(params.get("path", [""])[0]))
+                if image is None:
+                    self._send(404, "Image not found", "text/plain; charset=utf-8")
+                else:
+                    try:
+                        thumbnail = _thumbnail_path(image, db.parent / "thumbnails")
+                        self._send_bytes(200, thumbnail.read_bytes(), "image/jpeg")
+                    except (OSError, ValueError):
+                        self._send(500, "Could not create thumbnail", "text/plain; charset=utf-8")
                 return
             if parsed.path == "/api/image":
                 image = _image_path(db, unquote(params.get("path", [""])[0]))
