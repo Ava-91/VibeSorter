@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .cache import AnalysisCache
+from .classifier import classify_profile
 from .pipeline import analyze_image
 from .scanner import find_images
 
@@ -46,6 +47,7 @@ def index_folder(
                     skipped += 1
                     continue
                 cache.set(path, result.features, result.scores)
+                cache.set_profile(path, classify_profile(result.features))
                 analyzed += 1
 
         removed = cache.remove_missing()
