@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>VibeSorter</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,Segoe UI,system-ui,sans-serif;background:#0d0e12;color:#f4f5f7}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 10%,#20243a 0,#0d0e12 45%)}
+    main{width:min(760px,calc(100% - 48px));padding:42px;border:1px solid #2b3040;border-radius:24px;background:#12151d;box-shadow:0 24px 80px #0008}
+    .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#7f8cff}
+    h1{font-size:42px;margin:8px 0}
+    p{color:#aeb3c2;line-height:1.6}
+    .actions{display:flex;gap:12px;flex-wrap:wrap;margin:28px 0}
+    button{border:1px solid #343b52;background:#1a1f2c;color:#fff;border-radius:12px;padding:12px 16px;font:inherit;cursor:pointer}
+    button.primary{background:#5968e8;border-color:#5968e8}
+    button:disabled{opacity:.5;cursor:wait}
+    .path{padding:12px 14px;border-radius:10px;background:#0d1017;color:#cbd0dc;word-break:break-all;min-height:42px}
+    .status{margin-top:18px;padding:14px;border:1px solid #292e3d;border-radius:12px;color:#aeb3c2;white-space:pre-wrap}
+    .privacy{font-size:13px}
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Local-first desktop</div>
+  <h1>VibeSorter</h1>
+  <p>Analyze and browse your image library without sending source images to a cloud service.</p>
+
+  <div class="actions">
+    <button id="choose" class="primary">Choose image folder</button>
+    <button id="analyze" disabled>Analyze folder</button>
+  </div>
+
+  <div id="path" class="path">No folder selected.</div>
+  <div id="status" class="status">Ready.</div>
+  <p class="privacy">Your existing Python analysis engine and SQLite cache remain the source of truth. Tauri only provides the native desktop shell.</p>
+</main>
+
+<script>
+const tauri = window.__TAURI__;
+let folder = null;
+let browserUrl = null;
+
+const choose = document.getElementById("choose");
+const analyze = document.getElementById("analyze");
+const path = document.getElementById("path");
+const status = document.getElementById("status");
+
+function setStatus(message){ status.textContent = message; }
+
+choose.addEventListener("click", async () => {
+  try {
+    const selected = await tauri.core.invoke("choose_folder");
+    if (!selected) return;
+    folder = selected;
+    path.textContent = folder;
+    analyze.disabled = false;
+    setStatus("Folder selected. Start analysis when ready.");
+  } catch (error) {
+    setStatus("Could not choose a folder: " + error);
+  }
+});
+
+analyze.addEventListener("click", async () => {
+  if (!folder) return;
+  analyze.disabled = true;
+  choose.disabled = true;
+  setStatus("Starting local analysis…");
+
+  try {
+    await tauri.core.invoke("index_folder", { folder });
+    await new Promise(resolve => setTimeout(resolve, 250));
+    browserUrl = await tauri.core.invoke("start_backend", { folder, port: 8765 });
+    setStatus("Analysis started. Opening the local browser…");
+    window.location.href = browserUrl;
+  } catch (error) {
+    setStatus("Could not start VibeSorter: " + error);
+    analyze.disabled = false;
+    choose.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
