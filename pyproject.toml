@@ -7,7 +7,7 @@ name = "vibesorter"
 version = "0.8.1"
 description = "A local, lightweight image organizer that groups photos by visual vibes."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {file = "LICENSE"}
 authors = [{name = "Ava"}]
 dependencies = ["Pillow>=10.0"]
