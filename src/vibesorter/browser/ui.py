@@ -29,10 +29,3 @@ document.getElementById('search').onsubmit=e=>{{e.preventDefault();load()}};docu
 fetch('/api/attributes').then(r=>r.json()).then(d=>renderFilters(d.values));load();
 </script></body></html>"""
 
-
-def _card(row: dict) -> str:
-    path = str(row.get("path") or "")
-    label = str(row.get("vibe") or "Unclassified")
-    confidence = row.get("confidence")
-    text = f"{float(confidence):.0%}" if isinstance(confidence, (int, float)) and confidence <= 1 else (str(confidence) if confidence is not None else "—")
-    return f"<article class='card'><img class='thumb' src='/api/thumbnail?path={html.escape(path, quote=True)}' alt='{html.escape(label, quote=True)}'><div class='meta'><strong>{html.escape(label)}</strong><span>{html.escape(text)} confidence</span><small>{html.escape(path)}</small></div></article>"
