@@ -4,7 +4,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .cache import AnalysisCache
+from .verified_cache import VerifiedAnalysisCache
 from .classifier import classify_profile
 from .pipeline import analyze_image
 from .scanner import find_images
@@ -34,10 +34,10 @@ def index_folder(
     if progress:
         progress({"phase": "scan", "total": len(images)})
 
-    with AnalysisCache(cache_path) as cache:
+    with VerifiedAnalysisCache(cache_path) as cache:
         pending: list[Path] = []
         for image in images:
-            if cache.get(image) is None:
+            if cache.get_verified(image) is None:
                 pending.append(image)
             else:
                 reused += 1
