@@ -13,7 +13,7 @@ def render_page(rows: list[dict] | None = None, vibe: str | None = None, query: 
 </style></head>
 <body><h1>VibeSorter</h1><p>Local browser · cached analysis only · multidimensional filters</p>
 <div class='layout'><aside class='sidebar'><div id='filters'>Loading filters…</div></aside><main>
-<form id='search'><input id='query' type='text' placeholder='Search paths...' value='{html.escape(query or '', quote=True)}'><button type='submit'>Apply filters</button><button id='clear' type='button'>Clear all</button></form><div id='active' class='toolbar' aria-live='polite'></div></form>
+<form id='search'><input id='query' type='text' placeholder='Search paths...' value='{html.escape(query or '', quote=True)}'><button type='submit'>Apply filters</button><button id='clear' type='button'>Clear all</button></form><div id='active' class='toolbar' aria-live='polite'></div>
 <div class='toolbar'><span id='summary'>Loading…</span><button id='more' type='button' hidden>Load more</button></div><section id='grid' class='grid'>{initial}</section><div id='empty' class='empty' hidden>No cached analysis matched these filters.</div></main></div>
 <div id='modal' class='modal' hidden role='dialog' aria-modal='true' aria-labelledby='detail-title'><section class='dialog' tabindex='-1'><button id='close' class='close' aria-label='Close image details'>Close</button><div id='detail'></div></section></div>
 <script>
