@@ -49,6 +49,7 @@ const { listen } = tauri.event;
 let folder = null;
 let browserUrl = null;
 let analysisRunning = false;
+let analysisOutputBuffer = "";
 
 const choose = document.getElementById("choose");
 const analyze = document.getElementById("analyze");
@@ -72,14 +73,27 @@ async function openBrowser(){
 }
 
 listen("analysis-output", (event) => {
-  try {
-    const result = JSON.parse(event.payload);
-    setStatus(
-      "Analysis complete. " +
-      `Analyzed: ${result.analyzed ?? 0} · Reused: ${result.reused ?? 0} · Skipped: ${result.skipped ?? 0}`
-    );
-  } catch {
-    setStatus("Analysis is still running locally…");
+  analysisOutputBuffer += String(event.payload ?? "");
+  const lines = analysisOutputBuffer.split(/\\r?\\n/);
+  analysisOutputBuffer = lines.pop() ?? "";
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      const result = JSON.parse(line);
+      if (result.type !== "progress") continue;
+      if (result.phase === "scan") {
+        setStatus(`Scanning folder… ${result.total ?? 0} image(s) found.`);
+      } else if (result.phase === "analyze") {
+        const completed = result.completed ?? 0;
+        const total = result.total ?? 0;
+        const suffix = total ? ` ${completed}/${total}` : "";
+        setStatus(`Analyzing locally…${suffix}`);
+      } else if (result.phase === "complete") {
+        setStatus(`Analysis complete. Analyzed: ${result.analyzed ?? 0} · Reused: ${result.reused ?? 0} · Skipped: ${result.skipped ?? 0}`);
+      }
+    } catch {
+      setStatus("Analysis is still running locally…");
+    }
   }
 });
 
