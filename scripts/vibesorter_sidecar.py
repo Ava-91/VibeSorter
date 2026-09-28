@@ -9,9 +9,6 @@ def run() -> int:
     except KeyboardInterrupt:
         print("VibeSorter sidecar interrupted.", file=sys.stderr)
         return 130
-    except Exception as exc:
-        print(f"VibeSorter sidecar failed: {exc}", file=sys.stderr)
-        return 1
 
 
 if __name__ == "__main__":
