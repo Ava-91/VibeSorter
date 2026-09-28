@@ -20,7 +20,7 @@ dev = [
 
 [project.scripts]
 vibesorter = "vibesorter.entrypoint:main"
-vibesorter-browser = "vibesorter.browser.server:main"
+vibesorter-browser = "vibesorter.browser.launcher:main"
 vibesorter-desktop = "vibesorter.desktop.app:main"
 
 [tool.setuptools.packages.find]
