@@ -1,8 +1,8 @@
+from __future__ import annotations
+
 from .pillow_compat import install as _install_pillow_compat
 
 _install_pillow_compat()
-
-from __future__ import annotations
 
 from .annotation import ImageAnnotation, load_annotations, save_annotation
 from .cache import AnalysisCache
