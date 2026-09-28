@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from vibesorter.browser.launcher import _is_loopback
