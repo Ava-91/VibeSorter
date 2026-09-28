@@ -9,7 +9,6 @@ from .classifier import classify_profile
 from .pipeline import analyze_image
 from .scanner import find_images
 
-
 ProgressCallback = Callable[[dict[str, int | str]], None]
 
 
