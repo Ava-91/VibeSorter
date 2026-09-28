@@ -98,6 +98,19 @@ def _profile_matches(profile: ImageProfile | None, params: dict[str, list[str]])
     return all(not (wanted := _selected(params, family)) or multi[family].intersection(wanted) for family in multi)
 
 
+def _ensure_browser_indexes(conn: sqlite3.Connection) -> None:
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "images" in tables:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(images)")}
+        if "path" in columns:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_images_path_nocase ON images(path COLLATE NOCASE)")
+    if "profiles" in tables:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(profiles)")}
+        if "path" in columns:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_profiles_path ON profiles(path)")
+    conn.commit()
+
+
 def _profile_for(conn: sqlite3.Connection, path: str) -> ImageProfile | None:
     try:
         row = conn.execute("SELECT profile FROM profiles WHERE path=?", (path,)).fetchone()
@@ -128,6 +141,7 @@ def _query_rows(
     offset = max(0, offset)
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
+        _ensure_browser_indexes(conn)
         table, columns = _table_info(conn)
         if not table or not columns.get("path"):
             return [], 0
