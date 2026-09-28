@@ -4,7 +4,7 @@ import html
 
 
 def render_page(rows: list[dict] | None = None, vibe: str | None = None, query: str | None = None) -> str:
-    initial = "" if rows is None else "".join(_card(row) for row in rows)
+    initial = ""
     return f"""<!doctype html>
 <html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>VibeSorter Browser</title>
