@@ -25,7 +25,8 @@ class AppliedMove:
 def review_folder_plan(proposal: MoveProposal, *, accept_ids: set[int] | None = None, reject_ids: set[int] | None = None) -> tuple[FolderDecision, ...]:
     accepted = accept_ids or set()
     rejected = reject_ids or set()
-    if accepted & rejected: raise ValueError("an operation cannot be both accepted and rejected")
+    if accepted & rejected:
+        raise ValueError("an operation cannot be both accepted and rejected")
     return tuple(FolderDecision(operation, "rejected" if operation.id in rejected else "accepted" if operation.id in accepted else "pending") for operation in proposal.operations)
 
 
@@ -33,7 +34,8 @@ def validate_folder_plan(decisions: tuple[FolderDecision, ...]) -> tuple[str, ..
     blockers: list[str] = []
     destinations: set[Path] = set()
     for decision in decisions:
-        if decision.status != "accepted": continue
+        if decision.status != "accepted":
+            continue
         source = Path(decision.operation.source).expanduser()
         destination = Path(decision.operation.destination).expanduser()
         if not source.is_file():
@@ -58,14 +60,16 @@ def apply_folder_plan(decisions: tuple[FolderDecision, ...], *, confirm: bool = 
     applied: list[AppliedMove] = []
     try:
         for decision in decisions:
-            if decision.status != "accepted": continue
+            if decision.status != "accepted":
+                continue
             source = Path(decision.operation.source).expanduser()
             destination = Path(decision.operation.destination).expanduser()
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(destination))
             applied.append(AppliedMove(decision.operation.id, str(source), str(destination)))
     except OSError:
-        rollback_moves(tuple(applied)); raise
+        rollback_moves(tuple(applied))
+        raise
     if journal_path is not None:
         Path(journal_path).write_text(json.dumps([asdict(item) for item in applied], indent=2) + "\n", encoding="utf-8")
     return tuple(applied)
