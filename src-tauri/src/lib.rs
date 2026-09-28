@@ -106,7 +106,7 @@ async fn index_folder(app: tauri::AppHandle, folder: String) -> Result<(), Strin
         .shell()
         .sidecar("vibesorter-sidecar")
         .map_err(|error| format!("Could not prepare VibeSorter analysis: {error}"))?
-        .args(["index", &folder, "--json"]);
+        .args(["index", &folder, "--json", "--progress"]);
     let (mut events, child) = command
         .spawn()
         .map_err(|error| format!("Could not start analysis: {error}"))?;
