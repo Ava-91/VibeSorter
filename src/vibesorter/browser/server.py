@@ -149,7 +149,18 @@ def _query_rows(
         if where:
             sql += " WHERE " + " AND ".join(where)
         sql += f" ORDER BY {columns['path']} COLLATE NOCASE"
-        rows = conn.execute(sql, values).fetchall()
+        profile_filtered = any(_selected(params, family) for family in ATTRIBUTE_FAMILIES)
+        sql_can_paginate = not profile_filtered and (not vibe or bool(columns.get("vibe")))
+        total: int | None = None
+        if sql_can_paginate:
+            count_sql = f"SELECT COUNT(*) FROM {table}"
+            if where:
+                count_sql += " WHERE " + " AND ".join(where)
+            total = int(conn.execute(count_sql, values).fetchone()[0])
+            sql += " LIMIT ? OFFSET ?"
+            rows = conn.execute(sql, [*values, limit, offset]).fetchall()
+        else:
+            rows = conn.execute(sql, values).fetchall()
         matches: list[dict] = []
         for row in rows:
             item = _normalize_row(row, columns)
@@ -163,6 +174,8 @@ def _query_rows(
                 continue
             item["profile"] = profile.to_dict() if profile else None
             matches.append(item)
+        if total is not None:
+            return matches, total
         return matches[offset : offset + limit], len(matches)
 
 
