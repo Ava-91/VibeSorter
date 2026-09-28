@@ -75,6 +75,32 @@ jobs:
           projectPath: .
           args: --target ${{ matrix.target }}
 
+      - name: Inspect desktop bundle sizes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          bundle_root = Path("src-tauri/target")
+          files = [
+              p for p in bundle_root.glob("**/release/bundle/**/*")
+              if p.is_file()
+          ]
+
+          print("=== DESKTOP BUNDLES ===")
+          for path in sorted(files, key=lambda p: p.stat().st_size, reverse=True):
+              size = path.stat().st_size
+              print(f"{size / 1024 / 1024:8.2f} MiB  {path}")
+
+          print("\n=== SIDECAR ===")
+          for root in (Path("src-tauri/binaries"), Path("dist")):
+              if root.exists():
+                  for path in sorted(
+                      (p for p in root.rglob("*") if p.is_file()),
+                      key=lambda p: p.stat().st_size,
+                      reverse=True,
+                  ):
+                      print(f"{path.stat().st_size / 1024 / 1024:8.2f} MiB  {path}")
+
       - name: Upload desktop bundles
         uses: actions/upload-artifact@v4
         with:
