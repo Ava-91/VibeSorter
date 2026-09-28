@@ -49,6 +49,7 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--no-recursive", action="store_true")
     command.add_argument("--workers", type=int, default=8)
     command.add_argument("--json", action="store_true")
+    command.add_argument("--progress", action="store_true", help="Emit newline-delimited progress events while indexing.")
 
     command = subparsers.add_parser("sample-labels", help="Create a deterministic JSONL template for human labelling.")
     command.add_argument("folder", type=Path)
@@ -179,8 +180,16 @@ def _run_train(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
 
 
 def _run_index(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    def emit_progress(event: dict[str, int | str]) -> None:
+        print(json.dumps({"type": "progress", **event}, ensure_ascii=False), flush=True)
+
     try:
-        data = index_folder(args.folder.expanduser(), recursive=not args.no_recursive, workers=args.workers)
+        data = index_folder(
+            args.folder.expanduser(),
+            recursive=not args.no_recursive,
+            workers=args.workers,
+            progress=emit_progress if args.progress else None,
+        )
     except (FileNotFoundError, NotADirectoryError, ValueError, OSError) as exc:
         parser.error(str(exc))
     if args.json:
