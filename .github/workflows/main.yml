@@ -33,6 +33,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Install dependencies
         run: |
@@ -44,3 +45,28 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+  package-smoke:
+    name: Build and smoke-test package
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel --sdist
+      - name: Create clean smoke-test environment
+        run: python -m venv .smoke-venv
+      - name: Install built wheel
+        run: .smoke-venv/bin/python -m pip install dist/*.whl
+      - name: Smoke-test installed package
+        run: |
+          .smoke-venv/bin/vibesorter --version
+          .smoke-venv/bin/vibesorter --help
+          .smoke-venv/bin/python -c "import vibesorter; import vibesorter.browser.server"
