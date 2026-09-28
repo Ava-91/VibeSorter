@@ -34,6 +34,7 @@
     <button id="choose" class="primary">Choose image folder</button>
     <button id="analyze" disabled>Analyze folder</button>
     <button id="cancel" class="danger hidden">Cancel analysis</button>
+    <button id="browse" class="hidden">Browse results</button>
   </div>
 
   <div id="path" class="path">No folder selected.</div>
@@ -55,11 +56,13 @@ const analyze = document.getElementById("analyze");
 const cancel = document.getElementById("cancel");
 const path = document.getElementById("path");
 const status = document.getElementById("status");
+const browse = document.getElementById("browse");
 
 function setStatus(message){ status.textContent = message; }
 
 function setRunning(running){
   analysisRunning = running;
+  if (running) browse.classList.add("hidden");
   choose.disabled = running;
   analyze.disabled = running || !folder;
   cancel.classList.toggle("hidden", !running);
@@ -67,9 +70,11 @@ function setRunning(running){
 
 async function openBrowser(){
   if (!browserUrl) return;
-  setStatus("Analysis complete. Opening the local browser…");
+  setStatus("Opening the local browser…");
   window.location.href = browserUrl;
 }
+
+browse.addEventListener("click", openBrowser);
 
 listen("analysis-output", (event) => {
   try {
@@ -100,10 +105,10 @@ listen("analysis-cancelled", () => {
   setRunning(false);
 });
 
-listen("analysis-finished", async () => {
+listen("analysis-finished", () => {
   setRunning(false);
-  await new Promise(resolve => setTimeout(resolve, 350));
-  await openBrowser();
+  browse.classList.toggle("hidden", !browserUrl);
+  setStatus("Analysis complete. Your local results are ready to browse.");
 });
 
 choose.addEventListener("click", async () => {
