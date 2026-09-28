@@ -43,6 +43,8 @@ def _table_info(conn: sqlite3.Connection) -> tuple[str | None, dict[str, str]]:
         "confidence": "confidence" if "confidence" in columns else ("confidence_score" if "confidence_score" in columns else ""),
         "scores": "scores" if "scores" in columns else "",
         "features": "features" if "features" in columns else "",
+        "size": "size" if "size" in columns else "",
+        "mtime_ns": "mtime_ns" if "mtime_ns" in columns else "",
     }
 
 
@@ -150,7 +152,7 @@ def _query_rows(
         has_profiles = "profiles" in tables
         vibe = (params.get("vibe", [""])[0] or "").casefold()
         select_columns = [columns["path"]]
-        for name in ("vibe", "confidence", "scores"):
+        for name in ("vibe", "confidence", "scores", "size", "mtime_ns"):
             if columns.get(name) and columns[name] not in select_columns:
                 select_columns.append(columns[name])
         where = []
@@ -165,10 +167,18 @@ def _query_rows(
         if vibe and columns.get("vibe"):
             where.append(f"LOWER({columns['vibe']}) = ?")
             values.append(vibe)
+        sort = (params.get("sort", ["path"])[0] or "path").casefold()
+        direction = "DESC" if (params.get("direction", ["asc"])[0] or "asc").casefold() == "desc" else "ASC"
+        sort_columns = {"path": columns["path"]}
+        if columns.get("confidence"): sort_columns["confidence"] = columns["confidence"]
+        if columns.get("size"): sort_columns["size"] = columns["size"]
+        if columns.get("mtime_ns"): sort_columns["modified"] = columns["mtime_ns"]
+        sort_column = sort_columns.get(sort, columns["path"])
+        collation = " COLLATE NOCASE" if sort == "path" else ""
         sql = f"SELECT {', '.join(select_columns)} FROM {table}"
         if where:
             sql += " WHERE " + " AND ".join(where)
-        sql += f" ORDER BY {columns['path']} COLLATE NOCASE"
+        sql += f" ORDER BY {sort_column}{collation} {direction}, {columns['path']} COLLATE NOCASE"
         profile_filtered = any(_selected(params, family) for family in ATTRIBUTE_FAMILIES)
         sql_can_paginate = not profile_filtered and (not vibe or bool(columns.get("vibe")))
         total: int | None = None
