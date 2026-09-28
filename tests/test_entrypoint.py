@@ -121,7 +121,7 @@ def test_index_command_parses_folder_and_options(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(
         entrypoint,
         "index_folder",
-        lambda folder, recursive, workers: {
+        lambda folder, recursive, workers, progress=None: {
             "total": 2,
             "analyzed": 1,
             "reused": 1,
