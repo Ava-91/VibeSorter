@@ -27,7 +27,7 @@ Repeated analysis persists raw features and structured profiles in the local SQL
 
 ## Quick start
 
-VibeSorter requires Python 3.10+.
+VibeSorter requires Python 3.11+.
 
 ### Windows — Git Bash
 
@@ -110,7 +110,7 @@ For development, build the Tauri app from the repository root after installing t
 
 ```text
 Rust toolchain
-Python 3.10+
+Python 3.11+
 PyInstaller
 Tauri 2 CLI
 ```
@@ -347,7 +347,7 @@ ruff check .
 pytest -q
 ```
 
-The CI workflow tests Python 3.10, 3.11, 3.12, and 3.13 because the package declares `requires-python = ">=3.10"`.
+The CI workflow tests Python 3.11, 3.12, and 3.13 because the package declares `requires-python = ">=3.11"`.
 
 When changing the classifier or taxonomy, add regression tests for the changed contract. When changing filesystem operations, test dry-run, confirmation, history, conflict handling, and rollback behavior.
 
