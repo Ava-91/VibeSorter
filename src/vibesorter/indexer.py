@@ -4,10 +4,10 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .verified_cache import VerifiedAnalysisCache
 from .classifier import classify_profile
 from .pipeline import analyze_image
 from .scanner import find_images
+from .verified_cache import VerifiedAnalysisCache
 
 ProgressCallback = Callable[[dict[str, int | str]], None]
 
