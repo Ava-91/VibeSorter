@@ -3,7 +3,6 @@ from pathlib import Path
 from PIL import Image
 
 from vibesorter import indexer
-from vibesorter.cache import AnalysisCache
 from vibesorter.features import ColorSample, ImageFeatures
 from vibesorter.vibes import VibeScore
 
