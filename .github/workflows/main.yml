@@ -69,4 +69,5 @@ jobs:
         run: |
           .smoke-venv/bin/vibesorter --version
           .smoke-venv/bin/vibesorter --help
+          .smoke-venv/bin/vibesorter-browser --help
           .smoke-venv/bin/python -c "import vibesorter; import vibesorter.browser.server"
