@@ -132,6 +132,8 @@ def _query_rows(
         if not table or not columns.get("path"):
             return [], 0
         query_text = (params.get("q", [""])[0] or "").casefold()
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        has_profiles = "profiles" in tables
         vibe = (params.get("vibe", [""])[0] or "").casefold()
         select_columns = [columns["path"]]
         for name in ("vibe", "confidence", "scores"):
@@ -140,8 +142,12 @@ def _query_rows(
         where = []
         values: list[str] = []
         if query_text:
-            where.append(f"LOWER({columns['path']}) LIKE ?")
-            values.append(f"%{query_text}%")
+            if has_profiles:
+                where.append(f"(LOWER({columns['path']}) LIKE ? OR EXISTS (SELECT 1 FROM profiles AS p WHERE p.path = {table}.{columns['path']} AND LOWER(p.profile) LIKE ?))")
+                values.extend([f"%{query_text}%", f"%{query_text}%"])
+            else:
+                where.append(f"LOWER({columns['path']}) LIKE ?")
+                values.append(f"%{query_text}%")
         if vibe and columns.get("vibe"):
             where.append(f"LOWER({columns['vibe']}) = ?")
             values.append(vibe)
