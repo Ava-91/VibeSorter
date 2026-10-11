@@ -73,6 +73,27 @@ jobs:
         run: cargo tauri icon src-tauri/app-icon.svg
       - name: Build VibeSorter sidecar
         run: python scripts/build_sidecar.py
+      - name: Smoke-test packaged sidecar CLI
+        shell: python
+        run: |
+          import platform
+          import subprocess
+          from pathlib import Path
+
+          target = subprocess.check_output(
+              ["rustc", "--print", "host-tuple"], text=True
+          ).strip()
+          extension = ".exe" if platform.system() == "Windows" else ""
+          binary = Path("src-tauri") / "binaries" / f"vibesorter-sidecar-{target}{extension}"
+          result = subprocess.run(
+              [str(binary), "--help"],
+              capture_output=True,
+              text=True,
+              timeout=30,
+          )
+          if result.returncode != 0:
+              raise SystemExit(result.stderr or f"sidecar exited with {result.returncode}")
+          print("Packaged sidecar CLI help command succeeded.")
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v1
         env:
