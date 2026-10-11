@@ -48,6 +48,24 @@ def _table_info(conn: sqlite3.Connection) -> tuple[str | None, dict[str, str]]:
     }
 
 
+
+def _database_status(db_path: Path) -> dict:
+    """Describe cache availability without treating invalid data as an empty library."""
+    if not db_path.is_file():
+        return {"state": "missing", "count": 0, "message": "No analysis database exists yet. Choose a folder and run analysis."}
+    try:
+        with sqlite3.connect(db_path) as conn:
+            table, columns = _table_info(conn)
+            if not table or not columns.get("path"):
+                return {"state": "incompatible", "count": 0, "message": "This database has no supported VibeSorter image table. Re-run analysis or select the correct library."}
+            count = int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+    except (OSError, sqlite3.DatabaseError) as error:
+        return {"state": "unreadable", "count": 0, "message": f"The analysis database could not be read ({type(error).__name__}). Check file access or re-run analysis."}
+    if count == 0:
+        return {"state": "empty", "count": 0, "message": "The analysis database is valid but contains no indexed images yet."}
+    return {"state": "ready", "count": count, "message": f"{count} indexed image(s) available."}
+
+
 def _parse_scores(value: str | None) -> tuple[VibeScore, ...]:
     if not value:
         return ()
@@ -327,6 +345,9 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
                     self._send(404, "Labeling session not configured", "text/plain; charset=utf-8")
                 else:
                     self._send(200, render_label_page(label_session))
+                return
+            if parsed.path == "/api/status":
+                self._json(200, _database_status(db))
                 return
             if parsed.path == "/api/attributes":
                 values = {
