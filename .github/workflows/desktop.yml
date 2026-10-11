@@ -120,8 +120,12 @@ jobs:
           $install = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "Silent installer failed with exit code $($install.ExitCode)." }
 
-          $app = Get-ChildItem $installRoot -Recurse -File -Filter 'VibeSorter.exe' | Select-Object -First 1
-          if (-not $app) { throw "Installed VibeSorter.exe was not found under $installRoot." }
+          # Tauri's executable name follows the Rust package name, not productName.
+          $app = Get-ChildItem $installRoot -Recurse -File -Filter 'vibesorter-desktop.exe' | Select-Object -First 1
+          if (-not $app) {
+            Get-ChildItem $installRoot -Recurse -File | Select-Object FullName | Format-Table -AutoSize | Out-String | Write-Host
+            throw "Installed vibesorter-desktop.exe was not found under $installRoot."
+          }
 
           $process = Start-Process -FilePath $app.FullName -PassThru
           try {
