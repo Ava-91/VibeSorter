@@ -9,6 +9,7 @@ use tauri_plugin_shell::ShellExt;
 
 struct BackendState(Mutex<Option<CommandChild>>);
 struct AnalysisState(Mutex<Option<CommandChild>>);
+struct CancellationState(Mutex<bool>);
 
 #[tauri::command]
 async fn choose_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
@@ -98,6 +99,7 @@ async fn start_backend(app: tauri::AppHandle, folder: String, port: u16) -> Resu
 
 #[tauri::command]
 async fn index_folder(app: tauri::AppHandle, folder: String) -> Result<(), String> {
+    *app.state::<CancellationState>().0.lock().unwrap() = false;
     if let Some(child) = app.state::<AnalysisState>().0.lock().unwrap().take() {
         let _ = child.kill();
     }
@@ -131,7 +133,15 @@ async fn index_folder(app: tauri::AppHandle, folder: String) -> Result<(), Strin
                 }
                 CommandEvent::Terminated(payload) => {
                     *handle.state::<AnalysisState>().0.lock().unwrap() = None;
-                    if payload.code == Some(0) {
+                    let cancelled = {
+                        let mut state = handle.state::<CancellationState>().0.lock().unwrap();
+                        let was_cancelled = *state;
+                        *state = false;
+                        was_cancelled
+                    };
+                    if cancelled {
+                        let _ = handle.emit("analysis-cancelled", ());
+                    } else if payload.code == Some(0) {
                         let _ = handle.emit("analysis-finished", payload.code);
                     } else {
                         let _ = handle.emit("analysis-failed", payload.code);
@@ -156,10 +166,11 @@ async fn cancel_index(app: tauri::AppHandle) -> Result<(), String> {
         .take();
 
     if let Some(child) = child {
-        child
-            .kill()
-            .map_err(|error| format!("Could not cancel analysis: {error}"))?;
-        let _ = app.emit("analysis-cancelled", ());
+        *app.state::<CancellationState>().0.lock().unwrap() = true;
+        if let Err(error) = child.kill() {
+            *app.state::<CancellationState>().0.lock().unwrap() = false;
+            return Err(format!("Could not cancel analysis: {error}"));
+        }
     }
 
     Ok(())
@@ -170,6 +181,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(BackendState(Mutex::new(None)))
         .manage(AnalysisState(Mutex::new(None)))
+        .manage(CancellationState(Mutex::new(false)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
