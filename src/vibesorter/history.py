@@ -78,7 +78,7 @@ def record_batch(batch_id: str, results: tuple[MoveResult, ...], history_path: P
 
         existing = history_path.read_bytes() if history_path.exists() else b""
         payload = existing + b"".join(
-            (json.dumps(record, ensure_ascii=False) + "\\n").encode("utf-8") for record in records
+            (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8") for record in records
         )
         fd, temp_name = tempfile.mkstemp(prefix=f".{history_path.name}.", suffix=".tmp", dir=history_path.parent)
         try:
