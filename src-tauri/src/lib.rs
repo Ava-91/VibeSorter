@@ -125,7 +125,7 @@ async fn index_folder(app: tauri::AppHandle, folder: String) -> Result<(), Strin
                 }
                 CommandEvent::Stderr(bytes) => {
                     let _ = handle.emit(
-                        "analysis-error",
+                        "analysis-diagnostic",
                         String::from_utf8_lossy(&bytes).to_string(),
                     );
                 }
