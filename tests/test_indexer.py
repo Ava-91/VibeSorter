@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 from PIL import Image
@@ -95,3 +96,32 @@ def test_index_folder_reanalyzes_changed_and_removes_deleted_images(tmp_path, mo
     with AnalysisCache(tmp_path / ".vibesorter" / "analysis.db") as cache:
         assert cache.get(changed) is not None
         assert cache.get(deleted) is None
+
+
+def test_index_folder_removes_stale_cache_when_changed_image_becomes_corrupt(tmp_path, monkeypatch):
+    image = tmp_path / "photo.png"
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(image)
+
+    class Result:
+        def __init__(self, path):
+            self.features = _features(path)
+            self.scores = (VibeScore("Retro Blue", 0.7),)
+
+    def fake_analyze(path):
+        if path.read_bytes() == b"corrupt image":
+            raise OSError("simulated corrupt image")
+        return Result(path)
+
+    monkeypatch.setattr(indexer, "analyze_image", fake_analyze)
+    indexer.index_folder(tmp_path, workers=1)
+    image.write_bytes(b"corrupt image")
+
+    result = indexer.index_folder(tmp_path, workers=1)
+    assert result["analyzed"] == 0
+    assert result["skipped"] == 1
+    assert result["removed"] == 0
+
+    db = tmp_path / ".vibesorter" / "analysis.db"
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM images WHERE path=?", (str(image),)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM content_identity WHERE path=?", (str(image),)).fetchone()[0] == 0
