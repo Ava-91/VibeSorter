@@ -33,3 +33,15 @@ test("does not lose a line when chunks split JSON content", () => {
   parser.push('ress","phase":"scan"}\n');
   assert.deepEqual(lines, ['{"type":"progress","phase":"scan"}']);
 });
+
+
+test("desktop shell keeps results in-window and restores cancellation controls", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const html = fs.readFileSync(path.join(__dirname, "../desktop-ui/index.html"), "utf8");
+  assert.match(html, /id="results-frame"/);
+  assert.match(html, /src="progress.js"/);
+  assert.doesNotMatch(html, /window\\.location\\.href/);
+  assert.match(html, /cancel\\.disabled = false/);
+  assert.match(html, /analysis-diagnostic/);
+});
