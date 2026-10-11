@@ -108,8 +108,6 @@ def test_apply_rolls_back_completed_moves_when_later_move_fails(tmp_path: Path, 
 
 
 def test_apply_rolls_back_moves_when_journal_commit_fails(tmp_path: Path, monkeypatch) -> None:
-    from vibesorter import folder_operations
-
     image = tmp_path / "photo.jpg"
     image.write_bytes(b"photo")
     proposal = build_attribute_proposal([make_result(image)], {image: make_profile()}, tmp_path / "Sorted")
