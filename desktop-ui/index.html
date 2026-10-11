@@ -22,6 +22,12 @@
     .privacy{font-size:13px}
     .privacy strong{color:#d8dcff}
     .hidden{display:none}
+    main.results-open{width:calc(100% - 32px);max-width:none;margin:16px auto;padding:24px}
+    .results-shell{margin-top:22px;border-top:1px solid #292e3d;padding-top:18px}
+    .results-shell[hidden]{display:none}
+    .results-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .results-frame{display:block;width:100%;height:min(68vh,900px);min-height:420px;border:1px solid #343b52;border-radius:8px;background:#0d0e12}
+    @media(max-width:640px){main.results-open{padding:16px}.results-frame{height:65vh;min-height:320px}}
   </style>
 </head>
 <body>
@@ -38,10 +44,18 @@
   </div>
 
   <div id="path" class="path">No folder selected.</div>
-  <div id="status" class="status">Ready.</div>
+  <div id="status" class="status" role="status" aria-live="polite">Ready.</div>
+  <section id="results-shell" class="results-shell" hidden aria-label="Analysis results">
+    <div class="results-toolbar">
+      <strong>Local analysis results</strong>
+      <button id="hide-results" type="button">Hide results</button>
+    </div>
+    <iframe id="results-frame" class="results-frame" title="VibeSorter image results" referrerpolicy="no-referrer"></iframe>
+  </section>
   <p class="privacy"><strong>Privacy:</strong> images and analysis stay on this device. VibeSorter does not upload your library to a third-party AI service.</p>
 </main>
 
+<script src="progress.js"></script>
 <script>
 const tauri = window.__TAURI__;
 const { invoke } = tauri.core;
@@ -50,7 +64,7 @@ const { listen } = tauri.event;
 let folder = null;
 let browserUrl = null;
 let analysisRunning = false;
-let analysisOutputBuffer = "";
+const progressParser = window.VibeSorterProgress.createLineParser(handleProgressLine);
 
 const choose = document.getElementById("choose");
 const analyze = document.getElementById("analyze");
@@ -58,48 +72,68 @@ const cancel = document.getElementById("cancel");
 const path = document.getElementById("path");
 const status = document.getElementById("status");
 const browse = document.getElementById("browse");
+const resultsShell = document.getElementById("results-shell");
+const resultsFrame = document.getElementById("results-frame");
+const hideResults = document.getElementById("hide-results");
+const appMain = document.querySelector("main");
 
 function setStatus(message){ status.textContent = message; }
 
+function setResultsVisible(visible){
+  resultsShell.hidden = !visible;
+  appMain.classList.toggle("results-open", visible);
+  browse.textContent = visible ? "Hide results" : "Browse results";
+  if (visible && browserUrl) {
+    // Reload each time so the view sees the latest completed local index.
+    resultsFrame.src = browserUrl + "/?desktop-refresh=" + Date.now();
+  }
+}
+
+function handleProgressLine(line){
+  if (!line.trim()) return;
+  let result;
+  try { result = JSON.parse(line); }
+  catch { console.debug("VibeSorter backend output:", line); return; }
+  if (result.type !== "progress") return;
+  if (result.phase === "scan") {
+    setStatus(`Scanning folder… ${result.total ?? 0} image(s) found.`);
+  } else if (result.phase === "analyze") {
+    const completed = result.completed ?? 0;
+    const total = result.total ?? 0;
+    const suffix = total ? ` ${completed}/${total}` : "";
+    setStatus(`Analyzing locally…${suffix}`);
+  } else if (result.phase === "complete") {
+    setStatus(`Analysis complete. Analyzed: ${result.analyzed ?? 0} · Reused: ${result.reused ?? 0} · Skipped: ${result.skipped ?? 0}`);
+  }
+}
+
 function setRunning(running){
   analysisRunning = running;
-  if (running) browse.classList.add("hidden");
+  if (running) {
+    browse.classList.add("hidden");
+    setResultsVisible(false);
+  }
   choose.disabled = running;
   analyze.disabled = running || !folder;
   cancel.classList.toggle("hidden", !running);
+  // A previous cancellation must not leave the next run's button disabled.
+  cancel.disabled = false;
 }
 
-async function openBrowser(){
+browse.addEventListener("click", () => {
   if (!browserUrl) return;
-  setStatus("Opening the local browser…");
-  window.location.href = browserUrl;
-}
-
-browse.addEventListener("click", openBrowser);
+  setResultsVisible(resultsShell.hidden);
+  if (!resultsShell.hidden) setStatus("Showing results from the local analysis database.");
+});
+hideResults.addEventListener("click", () => setResultsVisible(false));
 
 listen("analysis-output", (event) => {
-  analysisOutputBuffer += String(event.payload ?? "");
-  const lines = analysisOutputBuffer.split(/\\r?\\n/);
-  analysisOutputBuffer = lines.pop() ?? "";
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    try {
-      const result = JSON.parse(line);
-      if (result.type !== "progress") continue;
-      if (result.phase === "scan") {
-        setStatus(`Scanning folder… ${result.total ?? 0} image(s) found.`);
-      } else if (result.phase === "analyze") {
-        const completed = result.completed ?? 0;
-        const total = result.total ?? 0;
-        const suffix = total ? ` ${completed}/${total}` : "";
-        setStatus(`Analyzing locally…${suffix}`);
-      } else if (result.phase === "complete") {
-        setStatus(`Analysis complete. Analyzed: ${result.analyzed ?? 0} · Reused: ${result.reused ?? 0} · Skipped: ${result.skipped ?? 0}`);
-      }
-    } catch {
-      setStatus("Analysis is still running locally…");
-    }
-  }
+  progressParser.push(String(event.payload ?? ""));
+});
+
+listen("analysis-diagnostic", (event) => {
+  // stderr can contain harmless warnings; only the child exit code decides success.
+  console.warn("VibeSorter analysis diagnostic:", event.payload);
 });
 
 listen("analysis-error", (event) => {
@@ -120,6 +154,7 @@ listen("analysis-cancelled", () => {
 });
 
 listen("analysis-finished", () => {
+  progressParser.flush();
   setRunning(false);
   browse.classList.toggle("hidden", !browserUrl);
   setStatus("Analysis complete. Your local results are ready to browse.");

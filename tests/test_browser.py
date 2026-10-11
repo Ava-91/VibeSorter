@@ -3,6 +3,7 @@ import sqlite3
 from pathlib import Path
 
 from vibesorter.browser.server import (
+    _database_status,
     _image_detail,
     _image_path,
     _query_rows,
@@ -157,3 +158,28 @@ def test_browser_renders_image_detail_template_without_unescaped_fstring_braces(
     assert "api/image-details?path=" in page
     assert "encodeURIComponent(path)" in page
     assert "${esc(d.vibe||'Unclassified')}" in page
+
+
+def test_database_status_distinguishes_missing_empty_and_ready(tmp_path: Path):
+    db = tmp_path / "analysis.db"
+    assert _database_status(db)["state"] == "missing"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE images (path TEXT PRIMARY KEY, size INTEGER)")
+        conn.commit()
+    assert _database_status(db)["state"] == "empty"
+    with sqlite3.connect(db) as conn:
+        conn.execute("INSERT INTO images VALUES (?, ?)", ("photo.png", 1))
+        conn.commit()
+    status = _database_status(db)
+    assert status["state"] == "ready"
+    assert status["count"] == 1
+
+
+def test_database_status_detects_unsupported_schema_and_corrupt_database(tmp_path: Path):
+    unsupported = tmp_path / "unsupported.db"
+    with sqlite3.connect(unsupported) as conn:
+        conn.execute("CREATE TABLE settings (key TEXT)")
+    assert _database_status(unsupported)["state"] == "incompatible"
+    corrupt = tmp_path / "corrupt.db"
+    corrupt.write_bytes(b"not a sqlite database")
+    assert _database_status(corrupt)["state"] == "unreadable"

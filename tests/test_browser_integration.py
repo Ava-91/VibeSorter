@@ -41,6 +41,11 @@ def test_browser_end_to_end_with_real_local_images(tmp_path: Path):
     thread.start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
     try:
+        with urlopen(f"{base}/api/status", timeout=3) as response:
+            status = json.load(response)
+        assert status["state"] == "ready"
+        assert status["count"] == 3
+
         with urlopen(f"{base}/api/images?limit=2&page=1", timeout=3) as response:
             payload = json.load(response)
         assert payload["total"] == 3
