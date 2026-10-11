@@ -102,6 +102,37 @@ jobs:
           projectPath: .
           args: --target ${{ matrix.target }}
 
+      - name: Install and launch Windows installer in a clean directory
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-ChildItem 'src-tauri/target' -Recurse -File -Filter '*.exe' |
+            Where-Object { $_.FullName -match '[\\/]release[\\/]bundle[\\/]nsis[\\/]' } |
+            Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer was not produced.' }
+
+          $installRoot = Join-Path $env:RUNNER_TEMP 'vibesorter-clean-install'
+          if (Test-Path $installRoot) { Remove-Item $installRoot -Recurse -Force }
+          New-Item -ItemType Directory -Path $installRoot | Out-Null
+
+          # NSIS supports /S for silent installation and /D as its final argument.
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Silent installer failed with exit code $($install.ExitCode)." }
+
+          $app = Get-ChildItem $installRoot -Recurse -File -Filter 'VibeSorter.exe' | Select-Object -First 1
+          if (-not $app) { throw "Installed VibeSorter.exe was not found under $installRoot." }
+
+          $process = Start-Process -FilePath $app.FullName -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $process.Refresh()
+            if ($process.HasExited) { throw "Installed app exited during startup with code $($process.ExitCode)." }
+            Write-Host "Clean-install smoke test passed: $($app.FullName) stayed running for 8 seconds."
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+
       - name: Inspect desktop bundle sizes
         shell: python
         run: |
