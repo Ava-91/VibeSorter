@@ -131,3 +131,41 @@ Do not change a weight because one image looks surprising. Look for repeated pat
 7. Re-run the full test suite and the same labelled evaluation set.
 
 A small or imbalanced sample should not be treated as proof of general classifier quality. The benchmark is a feedback loop for this project's real image library, not a claim of universal vision performance.
+
+
+## 5. Reproducibility metadata
+
+Keep a small metadata record alongside each local label file (for example, `labels.metadata.json`). The label file and metadata may contain private paths, so keep them out of Git unless the images and paths are intentionally public. A useful record is:
+
+```json
+{
+  "label_guide": "docs/evaluation.md",
+  "label_guide_revision": "<git commit SHA>",
+  "created_on": "YYYY-MM-DD",
+  "sampling_method": "confidence-ranked assisted review",
+  "source_scope": "<describe the local collection without exposing private paths>",
+  "counts_by_label": {
+    "Retro Blue": 0,
+    "Red / Warm": 0,
+    "Green & Black": 0,
+    "Black & White": 0,
+    "Soft / Pastel": 0,
+    "Dark / Moody": 0,
+    "Bright / Colorful": 0,
+    "Neutral / Photo Dump": 0
+  },
+  "known_biases": ["<small sample, source-specific styles, or other limitations>"]
+}
+```
+
+Update the counts from the labels actually used; zeroes above are placeholders, not a recommended class distribution. Record the guide revision and sampling method because changes in label definitions or sampling can look like classifier regressions even when the scoring code did not change.
+
+### Comparing classifier revisions
+
+1. Use the exact same labelled JSONL file at both revisions.
+2. Record the tested Git commit and package version for each report.
+3. At each revision, run `vibesorter evaluate labels.jsonl --json > evaluation-<revision>.json`.
+4. Compare overall accuracy together with per-vibe support, precision, recall, F1, confusion pairs, ambiguity, and calibration error. Do not treat a change in overall accuracy as sufficient evidence if rare classes regress.
+5. Keep machine-dependent timing benchmarks separate from classifier-quality comparisons.
+
+For a private library, the reproducible artifact is the label file plus its metadata stored locally—not a commit containing private photographs or personal filesystem paths. CI uses synthetic fixtures for metric contracts; it does not pretend those fixtures represent real-world classifier quality.
