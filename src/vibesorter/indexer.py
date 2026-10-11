@@ -54,6 +54,8 @@ def index_folder(
         with ThreadPoolExecutor(max_workers=workers) as executor:
             for path, result, error in executor.map(analyze, pending):
                 if error is not None:
+                    # A changed image that no longer decodes must not keep its old cached result.
+                    cache.remove(path)
                     skipped += 1
                     if progress:
                         progress({"phase": "analyze", "completed": analyzed + skipped, "total": len(images), "skipped": skipped})
