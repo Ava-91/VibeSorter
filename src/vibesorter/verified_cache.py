@@ -55,6 +55,12 @@ class VerifiedAnalysisCache(AnalysisCache):
             (str(image_path), digest),
         )
 
+    def remove(self, path: str | Path) -> None:
+        """Remove stale analysis, profile, and digest rows for a failed image."""
+        image_path = Path(path).expanduser()
+        self.connection.execute("DELETE FROM images WHERE path=?", (str(image_path),))
+        self.connection.execute("DELETE FROM content_identity WHERE path=?", (str(image_path),))
+
     def remove_missing(self) -> int:
         removed = super().remove_missing()
         self.connection.execute(
