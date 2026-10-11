@@ -58,25 +58,27 @@ def record_batch(batch_id: str, results: tuple[MoveResult, ...], history_path: P
         return 0
 
     history_path = history_path.expanduser()
-    history_path.parent.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(UTC).isoformat()
-    records = [
-        {
-            "event": "move",
-            "batch_id": batch_id,
-            "operation_id": result.operation_id,
-            "source": str(result.source),
-            "destination": str(result.destination),
-            "sha256": _sha256(result.destination),
-            "timestamp": timestamp,
-        }
-        for result in moved
-    ]
-
     try:
+        # Every operation after files have moved belongs inside this recovery
+        # boundary, including hashing destinations and creating the history dir.
+        history_path.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).isoformat()
+        records = [
+            {
+                "event": "move",
+                "batch_id": batch_id,
+                "operation_id": result.operation_id,
+                "source": str(result.source),
+                "destination": str(result.destination),
+                "sha256": _sha256(result.destination),
+                "timestamp": timestamp,
+            }
+            for result in moved
+        ]
+
         existing = history_path.read_bytes() if history_path.exists() else b""
         payload = existing + b"".join(
-            (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8") for record in records
+            (json.dumps(record, ensure_ascii=False) + "\\n").encode("utf-8") for record in records
         )
         fd, temp_name = tempfile.mkstemp(prefix=f".{history_path.name}.", suffix=".tmp", dir=history_path.parent)
         try:
