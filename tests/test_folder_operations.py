@@ -80,7 +80,7 @@ def test_validation_blocks_existing_destinations(tmp_path: Path) -> None:
 
 
 def test_apply_rolls_back_completed_moves_when_later_move_fails(tmp_path: Path, monkeypatch) -> None:
-    import vibesorter.folder_operations as folder_operations
+    from vibesorter import folder_operations
 
     first = tmp_path / "first.jpg"
     second = tmp_path / "second.jpg"
@@ -108,7 +108,7 @@ def test_apply_rolls_back_completed_moves_when_later_move_fails(tmp_path: Path, 
 
 
 def test_apply_rolls_back_moves_when_journal_commit_fails(tmp_path: Path, monkeypatch) -> None:
-    import vibesorter.folder_operations as folder_operations
+    from vibesorter import folder_operations
 
     image = tmp_path / "photo.jpg"
     image.write_bytes(b"photo")
