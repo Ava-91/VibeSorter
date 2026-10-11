@@ -55,6 +55,27 @@ def test_record_batch_failure_restores_moves(tmp_path: Path, monkeypatch: pytest
     assert not history.exists()
 
 
+
+def test_record_batch_hash_failure_restores_moves(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = tmp_path / "source.jpg"
+    destination = tmp_path / "Sorted" / "source.jpg"
+    source.write_bytes(b"image")
+    destination.parent.mkdir()
+    source.replace(destination)
+    history = tmp_path / ".vibesorter" / "history.jsonl"
+
+    def fail_hash(_path: Path) -> str:
+        raise OSError("simulated destination read failure")
+
+    monkeypatch.setattr("vibesorter.history._sha256", fail_hash)
+
+    with pytest.raises(OSError, match="simulated destination read failure"):
+        record_batch("batch-hash-failure", (_moved(source, destination),), history)
+
+    assert source.is_file()
+    assert not destination.exists()
+    assert not history.exists()
+
 def test_record_batch_ignores_non_moved_results(tmp_path: Path) -> None:
     source = tmp_path / "missing.jpg"
     destination = tmp_path / "Sorted" / "missing.jpg"
