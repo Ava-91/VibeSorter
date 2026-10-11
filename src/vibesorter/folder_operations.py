@@ -57,6 +57,12 @@ def apply_folder_plan(decisions: tuple[FolderDecision, ...], *, confirm: bool = 
     blockers = validate_folder_plan(decisions)
     if blockers:
         raise ValueError("folder plan has blockers: " + "; ".join(blockers))
+
+    journal = Path(journal_path).expanduser() if journal_path is not None else None
+    temporary_journal = journal.with_name(journal.name + ".tmp") if journal is not None else None
+    if journal is not None:
+        journal.parent.mkdir(parents=True, exist_ok=True)
+
     applied: list[AppliedMove] = []
     try:
         for decision in decisions:
@@ -67,11 +73,21 @@ def apply_folder_plan(decisions: tuple[FolderDecision, ...], *, confirm: bool = 
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(destination))
             applied.append(AppliedMove(decision.operation.id, str(source), str(destination)))
-    except OSError:
-        rollback_moves(tuple(applied))
+
+        if journal is not None and temporary_journal is not None:
+            temporary_journal.write_text(
+                json.dumps([asdict(item) for item in applied], indent=2) + "\n",
+                encoding="utf-8",
+            )
+            temporary_journal.replace(journal)
+    except Exception as error:
+        try:
+            rollback_moves(tuple(applied))
+        except (OSError, ValueError) as rollback_error:
+            raise RuntimeError(
+                f"folder operation failed ({error}); rollback was incomplete ({rollback_error})"
+            ) from error
         raise
-    if journal_path is not None:
-        Path(journal_path).write_text(json.dumps([asdict(item) for item in applied], indent=2) + "\n", encoding="utf-8")
     return tuple(applied)
 
 
