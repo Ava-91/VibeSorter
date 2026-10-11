@@ -133,8 +133,9 @@ async fn index_folder(app: tauri::AppHandle, folder: String) -> Result<(), Strin
                 }
                 CommandEvent::Terminated(payload) => {
                     *handle.state::<AnalysisState>().0.lock().unwrap() = None;
+                    let cancellation_state = handle.state::<CancellationState>();
                     let cancelled = {
-                        let mut state = handle.state::<CancellationState>().0.lock().unwrap();
+                        let mut state = cancellation_state.0.lock().unwrap();
                         let was_cancelled = *state;
                         *state = false;
                         was_cancelled
