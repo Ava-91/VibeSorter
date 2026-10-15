@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import io
+import ipaddress
 import json
 import mimetypes
 import sqlite3
+import sys
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -354,15 +356,67 @@ def _image_path(db_path: Path, requested: str) -> Path | None:
     return path if path.is_file() else None
 
 
-def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=None):
+def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=None, *, allow_network: bool = False):
     db = Path(db_path)
 
     class Handler(BaseHTTPRequestHandler):
+        def _host_allowed(self, netloc: str) -> bool:
+            parsed = urlparse("//" + netloc)
+            if not parsed.hostname:
+                return False
+            try:
+                port = parsed.port
+            except ValueError:
+                return False
+            if port is None and self.server.server_port != 80:
+                return False
+            if port is not None and port != self.server.server_port:
+                return False
+            if allow_network:
+                return True
+            if parsed.hostname.casefold() == "localhost":
+                return True
+            try:
+                return ipaddress.ip_address(parsed.hostname).is_loopback
+            except ValueError:
+                return False
+
+        def _request_allowed(self, *, require_origin: bool = False) -> bool:
+            host = self.headers.get("Host", "")
+            if not self._host_allowed(host):
+                self._send(403, "Invalid Host header", "text/plain; charset=utf-8")
+                return False
+            if require_origin:
+                origin = self.headers.get("Origin", "")
+                parsed_origin = urlparse(origin)
+                if (
+                    parsed_origin.scheme != "http"
+                    or not parsed_origin.netloc
+                    or parsed_origin.netloc.casefold() != host.casefold()
+                    or not self._host_allowed(parsed_origin.netloc)
+                ):
+                    self._send(403, "Same-origin request required", "text/plain; charset=utf-8")
+                    return False
+            return True
+
+        def _security_headers(self) -> None:
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+            )
+
         def _send(self, status: int, content: str, content_type: str = "text/html; charset=utf-8") -> None:
             body = content.encode()
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
+            self._security_headers()
             self.end_headers()
             self.wfile.write(body)
 
@@ -370,6 +424,7 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
+            self._security_headers()
             self.end_headers()
             self.wfile.write(body)
 
@@ -377,6 +432,8 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
             self._send(status, json.dumps(payload, ensure_ascii=False), "application/json; charset=utf-8")
 
         def do_GET(self) -> None:
+            if not self._request_allowed():
+                return
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
             if parsed.path == "/label":
@@ -447,6 +504,19 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
             self._send(200, render_page())
 
         def do_POST(self) -> None:
+            if not self._request_allowed(require_origin=True):
+                return
+            if self.headers.get_content_type() != "application/json":
+                self._json(415, {"error": "application/json content type required"})
+                return
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                self._json(400, {"error": "invalid Content-Length"})
+                return
+            if content_length < 0 or content_length > 64 * 1024:
+                self._json(413, {"error": "request body exceeds 64 KiB limit"})
+                return
             path = urlparse(self.path).path
             if label_session is None or path not in {"/api/label/decision", "/api/label/undo"}:
                 self._json(404, {"error": "Labeling session not configured" if label_session is None else "Not found"})
@@ -455,8 +525,7 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
                 self._json(200, {"undone": label_session.undo(), "labelled": label_session.labelled})
                 return
             try:
-                length = int(self.headers.get("Content-Length", "0"))
-                data = json.loads(self.rfile.read(length) or b"{}")
+                data = json.loads(self.rfile.read(content_length) or b"{}")
                 requested = str(data["path"])
                 label = data.get("label")
                 skip = bool(data.get("skip", False))
@@ -475,8 +544,26 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
     return Handler
 
 
-def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127.0.0.1", port: int = 8765, label_session=None) -> None:
-    server = ThreadingHTTPServer((host, port), create_app(db_path, label_session=label_session))
+def _is_loopback_host(host: str) -> bool:
+    if host.strip().casefold() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.strip()).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_bind_host(host: str, allow_network: bool) -> None:
+    if not _is_loopback_host(host) and not allow_network:
+        raise ValueError("non-loopback browser hosts require --allow-network")
+    if not _is_loopback_host(host):
+        print("WARNING: VibeSorter is exposing cached image data to the network. Use only on a trusted network.", file=sys.stderr)
+
+
+def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127.0.0.1", port: int = 8765, label_session=None, *, allow_network: bool = False) -> None:
+    _validate_bind_host(host, allow_network)
+    server = ThreadingHTTPServer((host, port), create_app(db_path, label_session=label_session, allow_network=allow_network))
+    server.daemon_threads = True
     print(f"VibeSorter browser: http://{host}:{port}")
     try:
         server.serve_forever()
@@ -486,8 +573,11 @@ def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127
         server.server_close()
 
 
-def run_label_server(label_session, *, db_path: str | Path, host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = ThreadingHTTPServer((host, port, ), create_app(db_path, label_session=label_session)); print(f"VibeSorter labeling: http://{host}:{port}/label")
+def run_label_server(label_session, *, db_path: str | Path, host: str = "127.0.0.1", port: int = 8765, allow_network: bool = False) -> None:
+    _validate_bind_host(host, allow_network)
+    server = ThreadingHTTPServer((host, port), create_app(db_path, label_session=label_session, allow_network=allow_network))
+    server.daemon_threads = True
+    print(f"VibeSorter labeling: http://{host}:{port}/label")
     try: server.serve_forever()
     except KeyboardInterrupt: pass
     finally: server.server_close()

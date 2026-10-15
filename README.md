@@ -398,3 +398,10 @@ Desktop lifecycle: the native shell binds browser access to loopback, rejects an
 - Unicode and long path components are handled through `pathlib`, subject to the underlying operating system's path limits.
 - EXIF orientation is applied before analysis. Animated GIFs and other multi-frame formats are analyzed using their first frame only.
 - Images exceeding Pillow's configured safe pixel limit are rejected before feature processing. Unsupported, corrupt, empty, or unreadable images produce a clear analysis error rather than a fabricated classification.
+
+
+## Browser security and network exposure
+
+The browser and labeling UI bind to loopback by default. Binding to a non-loopback interface is rejected unless `--allow-network` is explicitly supplied; opting in prints a warning because cached paths, metadata, and image bytes become reachable to other devices that can connect. Prefer a trusted private network and firewall rules, and stop the server when finished. This server is not intended to be an internet-facing service.
+
+Requests are checked against the Host header; state-changing labeling requests require a same-origin `Origin` and `application/json` content type, with a bounded request body. Responses include anti-framing, MIME-sniffing, referrer, cache, and content-security headers. These checks reduce browser-based cross-origin abuse but are not a substitute for network isolation when `--allow-network` is used. The desktop shell restricts sidecar spawning to the fixed browser and index argument shapes and always requests a loopback browser host.
