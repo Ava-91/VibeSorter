@@ -33,7 +33,7 @@ def main() -> int:
     args = parser.parse_args()
     if not args.allow_network and not _is_loopback(args.host):
         parser.error("non-loopback browser hosts require --allow-network")
-    run_server(args.db, host=args.host, port=args.port)
+    run_server(args.db, host=args.host, port=args.port, allow_network=args.allow_network)
     return 0
 
 

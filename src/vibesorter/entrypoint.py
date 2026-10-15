@@ -66,11 +66,13 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--all-order", action="store_true", help="Use deterministic path order instead of prioritizing uncertain predictions.")
     command.add_argument("--host", default="127.0.0.1")
     command.add_argument("--port", type=int, default=8765)
+    command.add_argument("--allow-network", action="store_true", help="Explicitly expose the labeling browser on a non-loopback network interface.")
 
     command = subparsers.add_parser("browser", help="Open the local cached-analysis browser.")
     command.add_argument("--db", type=Path, default=Path(".vibesorter/analysis.db"))
     command.add_argument("--host", default="127.0.0.1")
     command.add_argument("--port", type=int, default=8765)
+    command.add_argument("--allow-network", action="store_true", help="Explicitly expose cached images on a non-loopback network interface.")
 
     command = subparsers.add_parser("desktop", help="Launch the local VibeSorter desktop shell.")
     command.add_argument("--db", type=Path, default=Path(".vibesorter/analysis.db"))
@@ -247,13 +249,19 @@ def _run_label(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
     from .browser.server import run_label_server
     print(f"Prepared {len(candidates)} candidate image(s); {session.labelled} already labelled.")
     print("Open the local URL in your browser. Press Ctrl+C here to stop the server.")
-    run_label_server(session, db_path=db, host=args.host, port=args.port)
+    try:
+        run_label_server(session, db_path=db, host=args.host, port=args.port, allow_network=args.allow_network)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
     return 0
 
 
-def _run_browser(args: argparse.Namespace) -> int:
+def _run_browser(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     from .browser.server import run_server
-    run_server(args.db, args.host, args.port)
+    try:
+        run_server(args.db, args.host, args.port, allow_network=args.allow_network)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
     return 0
 
 
@@ -283,7 +291,7 @@ def main() -> int:
         if args.command == "label":
             return _run_label(args, parser)
         if args.command == "browser":
-            return _run_browser(args)
+            return _run_browser(args, parser)
         return _run_desktop(args)
     if argv and argv[0] in {"--help", "-h"}:
         legacy_main()
