@@ -376,3 +376,12 @@ Measure SQLite-backed profile filtering and pagination on a synthetic cached lib
     python scripts/benchmark_browser_profiles.py --rows 50000
 
 The benchmark reports filtered result count, page size, and elapsed query time. The browser applies supported profile filters, counts, ordering, and pagination in SQLite, and loads profile JSON only for the returned page.
+
+
+### Verified-cache reindex benchmark
+
+Measure directory discovery, first indexing, the content-verification pass, and a repeat index on generated local images:
+
+    python scripts/benchmark_verified_reindex.py --files 250 --size 256 --workers 4
+
+Content verification still hashes every candidate whose size and modification time match the cached identity. That full digest is necessary to detect same-size, same-mtime content changes; the optimization batches cache metadata lookups into one SQLite join and uses `hashlib.file_digest` to reduce Python-level hashing overhead.
