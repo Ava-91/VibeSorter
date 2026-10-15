@@ -243,7 +243,7 @@ def _run_propose(args, parser) -> int:
         _, results, skipped = _analyze_folder(images, args.workers, vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, cache=cache)
     finally:
         cache.close()
-    proposal = build_proposal(results, args.output_root)
+    proposal = build_proposal(results, args.output_root, source_root=args.folder)
     if args.output is not None: args.output.write_text(proposal_to_json(proposal), encoding="utf-8"); print(f"Wrote proposal: {args.output}")
     elif args.json: print(json.dumps(proposal_to_dict(proposal), indent=2, ensure_ascii=False))
     else: print(f"Proposed {len(proposal.operations)} move(s); skipped {skipped} image(s).")
@@ -255,7 +255,7 @@ def _run_apply(args, parser) -> int:
         parser.error("apply requires --confirm or --dry-run")
     try:
         data = json.loads(args.reviewed.expanduser().read_text(encoding="utf-8"))
-        proposal_from_dict(data)
+        proposal = proposal_from_dict(data)
         reviewed = reviewed_from_dict(data)
     except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
         parser.error(f"invalid reviewed proposal: {exc}")
@@ -264,6 +264,8 @@ def _run_apply(args, parser) -> int:
         reviewed,
         confirm=args.confirm and not args.dry_run,
         dry_run=args.dry_run,
+        source_root=proposal.source_root,
+        output_root=proposal.output_root,
     )
     moved = tuple(result for result in results if result.status == "moved")
     batch_id = None

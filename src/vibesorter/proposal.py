@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -24,6 +25,7 @@ class MoveProposal:
     version: int
     output_root: str
     operations: tuple[MoveOperation, ...]
+    source_root: str = ""
 
 
 def _safe_name(value: str) -> str:
@@ -32,10 +34,20 @@ def _safe_name(value: str) -> str:
 
 
 def build_proposal(
-    results: list[AnalysisResult], output_root: str | Path = "VibeSorted"
+    results: list[AnalysisResult],
+    output_root: str | Path = "VibeSorted",
+    *,
+    source_root: str | Path | None = None,
 ) -> MoveProposal:
-    """Build a deterministic, read-only move plan from legacy analysis results."""
-    root = Path(output_root)
+    """Build a deterministic, read-only move plan anchored to a source library."""
+    root = Path(output_root).expanduser().resolve(strict=False)
+    if source_root is None:
+        parents = [str(Path(result.path).expanduser().resolve(strict=False).parent) for result in results]
+        inferred_root = os.path.commonpath(parents) if parents else ""
+        source = Path(inferred_root) if inferred_root else Path()
+    else:
+        source = Path(source_root).expanduser()
+    source = source.resolve(strict=False)
     ordered = sorted(results, key=lambda result: str(result.path).casefold())
     used: set[str] = set()
     operations: list[MoveOperation] = []
@@ -61,7 +73,7 @@ def build_proposal(
                 round(result.features.text_likelihood, 6),
             )
         )
-    return MoveProposal(version=1, output_root=str(root), operations=tuple(operations))
+    return MoveProposal(version=1, output_root=str(root), operations=tuple(operations), source_root=str(source))
 
 
 def _confidence(result: AnalysisResult) -> float:
@@ -74,6 +86,7 @@ def proposal_to_dict(proposal: MoveProposal) -> dict:
     return {
         "version": proposal.version,
         "output_root": proposal.output_root,
+        "source_root": proposal.source_root,
         "operations": [asdict(operation) for operation in proposal.operations],
     }
 
@@ -89,6 +102,7 @@ def proposal_from_dict(data: dict) -> MoveProposal:
         version=int(data["version"]),
         output_root=str(data.get("output_root", "VibeSorted")),
         operations=operations,
+        source_root=str(data.get("source_root", "")),
     )
 
 
