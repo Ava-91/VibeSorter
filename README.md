@@ -297,7 +297,7 @@ Rollback verifies the recorded file hash before restoring a file and refuses to 
 
 Search combines independent attributes instead of requiring a compound category. Multiple values in a multi-valued family are supported, while different families can be combined with AND semantics.
 
-Physical organization is a separate, explicit step. A folder plan chooses one primary attribute for folder names; secondary attributes remain metadata so multi-label images are not duplicated. Proposed moves are reviewable and read-only until the user explicitly confirms them. Existing destinations, missing sources, duplicate destinations, and low-confidence classifications are blocked before mutation, and applied moves can be rolled back.
+Physical organization is a separate, explicit step. A folder plan chooses one primary attribute for folder names; secondary attributes remain metadata so multi-label images are not duplicated. Proposed moves are reviewable and read-only until the user explicitly confirms them. Existing destinations, missing sources, duplicate destinations, low-confidence classifications, and paths that escape the proposal's recorded source/output roots are blocked before mutation. Apply validates the whole accepted batch before moving any file; legacy reviewed proposals without a recorded source root must be regenerated. Applied moves can be rolled back.
 
 ## Python API
 
