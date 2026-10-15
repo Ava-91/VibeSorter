@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 ANALYSIS_SIZE = (64, 64)
 PALETTE_SIZE = 6
+MAX_IMAGE_PIXELS = int(Image.MAX_IMAGE_PIXELS or 89_478_485)
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,11 +102,26 @@ def extract_features(path: str | Path) -> ImageFeatures:
     """Extract lightweight global and spatial visual signals."""
     image_path = Path(path).expanduser()
     try:
-        with Image.open(image_path) as source:
-            source.verify()
-        with Image.open(image_path) as source:
-            image = ImageOps.exif_transpose(source).convert("RGB")
-            image.thumbnail(ANALYSIS_SIZE, Image.Resampling.LANCZOS)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(image_path) as source:
+                if source.width * source.height > MAX_IMAGE_PIXELS:
+                    raise ValueError(
+                        f"Image exceeds the {MAX_IMAGE_PIXELS:,}-pixel safety limit: {image_path}"
+                    )
+                source.seek(0)
+                source.verify()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(image_path) as source:
+                if source.width * source.height > MAX_IMAGE_PIXELS:
+                    raise ValueError(
+                        f"Image exceeds the {MAX_IMAGE_PIXELS:,}-pixel safety limit: {image_path}"
+                    )
+                # Animated/multi-page formats are analyzed using their first frame.
+                source.seek(0)
+                image = ImageOps.exif_transpose(source).convert("RGB")
+                image.thumbnail(ANALYSIS_SIZE, Image.Resampling.LANCZOS)
             hsv_image = image.convert("HSV")
             rgb_pixels = image.getdata()
             hsv_pixels = hsv_image.getdata()
@@ -132,6 +149,8 @@ def extract_features(path: str | Path) -> ImageFeatures:
                         warm += 1
                     elif 0.48 <= hue <= 0.72:
                         cool += 1
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise ValueError(f"Image exceeds Pillow's safe pixel limit: {image_path}") from exc
     except UnidentifiedImageError as exc:
         raise ValueError(f"Unsupported or corrupted image: {image_path}") from exc
     except OSError as exc:

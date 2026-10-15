@@ -2,6 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from vibesorter.scanner import find_images
 
 
@@ -72,3 +74,52 @@ class ScannerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+def test_scanner_includes_hidden_user_folders_and_unicode_names(tmp_path: Path):
+    hidden = tmp_path / ".my-private-album"
+    hidden.mkdir()
+    image = hidden / "雪-照片_日本.JPG"
+    image.touch()
+
+    assert find_images(tmp_path) == [image]
+
+
+def test_scanner_excludes_symlinked_files_and_directories(tmp_path: Path):
+    root = tmp_path / "library"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    target = outside / "photo.jpg"
+    target.touch()
+    try:
+        (root / "linked.jpg").symlink_to(target)
+        (root / "linked-directory").symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable on this platform")
+
+    assert find_images(root) == []
+
+
+def test_scanner_raises_on_walk_permission_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    root = tmp_path / "library"
+    root.mkdir()
+
+    def failing_walk(_root, *, followlinks, onerror):
+        onerror(PermissionError("simulated directory permission error"))
+        return iter(())
+
+    monkeypatch.setattr("vibesorter.scanner.os.walk", failing_walk)
+    with pytest.raises(PermissionError, match="simulated directory permission error"):
+        find_images(root)
+
+
+
+def test_scanner_handles_unicode_and_long_nested_paths(tmp_path: Path):
+    nested = tmp_path / ("a" * 60) / ("b" * 60)
+    nested.mkdir(parents=True)
+    image = nested / "写真-portrait.png"
+    image.touch()
+
+    assert find_images(tmp_path) == [image]
