@@ -421,3 +421,8 @@ VibeSorter is a sorting aid, not an image-understanding authority. It does not i
 
 
 Version bumps must update the Python project/runtime and both Tauri version declarations together; see [the version synchronization checklist](docs/versioning.md). CI tests that these values remain identical.
+
+
+## Desktop platform support
+
+The supported OS/architecture matrix, known limitations, signing/notarization status, and install/upgrade/uninstall acceptance process are documented in [the desktop platform policy](docs/platform-support-and-signing.md). Intel macOS is not a v1.0 target, and current Windows/macOS release artifacts are unsigned/not notarized unless the release workflow is explicitly updated and verified.
