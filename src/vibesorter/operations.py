@@ -7,6 +7,8 @@ from pathlib import Path
 from .path_safety import canonical_path, same_path
 from .review import ReviewedOperation
 
+MIN_APPLY_CONFIDENCE = 0.60
+
 
 @dataclass(frozen=True, slots=True)
 class MoveResult:
@@ -18,7 +20,7 @@ class MoveResult:
 
 
 def apply_reviewed(reviewed: tuple[ReviewedOperation, ...], *, confirm: bool = False, dry_run: bool = False) -> tuple[MoveResult, ...]:
-    """Apply only accepted operations after explicit confirmation."""
+    """Apply accepted operations after confirmation, blocking low-confidence moves."""
     if not confirm and not dry_run:
         raise ValueError("filesystem changes require explicit confirmation")
     results: list[MoveResult] = []
@@ -26,6 +28,17 @@ def apply_reviewed(reviewed: tuple[ReviewedOperation, ...], *, confirm: bool = F
     for item in (item for item in reviewed if item.status == "accepted"):
         source = Path(item.operation.source).expanduser()
         destination = Path(item.operation.destination).expanduser()
+        if item.operation.confidence < MIN_APPLY_CONFIDENCE:
+            results.append(
+                MoveResult(
+                    item.operation.id,
+                    "low_confidence",
+                    source,
+                    destination,
+                    f"classification confidence {item.operation.confidence:.0%} is below the {MIN_APPLY_CONFIDENCE:.0%} apply threshold",
+                )
+            )
+            continue
         if same_path(source, destination):
             results.append(MoveResult(item.operation.id, "skipped", source, destination, "source and destination are identical"))
             continue
