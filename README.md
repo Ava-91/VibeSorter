@@ -388,3 +388,13 @@ Content verification still hashes every candidate whose size and modification ti
 
 
 Desktop lifecycle: the native shell binds browser access to loopback, rejects an occupied requested port before launching the sidecar, and requires an HTTP `/api/status` health response within five seconds. A failed startup is terminated and cleared; stale process events cannot overwrite a restarted backend, and active backend/analysis children are killed when the main window closes.
+
+
+## Scanner and image-input contract
+
+- Discovery uses extensions registered by the installed Pillow build. It is extension-based; decoding and corruption checks happen during analysis.
+- Recursive scans include hidden user folders but prune VibeSorter-managed `.vibesorter` folders. Symlinked files and directories are excluded; directory symlinks are never followed.
+- Directory traversal and permission errors are raised instead of silently returning a partial scan. Files that disappear, change, or become unreadable after discovery are handled as analysis failures; indexing removes stale cached analysis for a failed changed file.
+- Unicode and long path components are handled through `pathlib`, subject to the underlying operating system's path limits.
+- EXIF orientation is applied before analysis. Animated GIFs and other multi-frame formats are analyzed using their first frame only.
+- Images exceeding Pillow's configured safe pixel limit are rejected before feature processing. Unsupported, corrupt, empty, or unreadable images produce a clear analysis error rather than a fabricated classification.
