@@ -39,7 +39,7 @@ def _rollback_results(results: list[MoveResult]) -> None:
         if not result.destination.is_file():
             failures.append(f"#{result.operation_id}: destination is missing")
             continue
-        if result.source.exists():
+        if result.source.exists() or result.source.is_symlink():
             failures.append(f"#{result.operation_id}: source path is occupied")
             continue
         try:
@@ -102,21 +102,33 @@ def load_batch(history_path: Path, batch_id: str) -> tuple[HistoryRecord, ...]:
     path = history_path.expanduser()
     if not path.is_file():
         raise FileNotFoundError(f"history file not found: {path}")
-    for line in path.read_text(encoding="utf-8").splitlines():
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        raise OSError(f"could not read rollback history {path}: {exc}") from exc
+    for line_number, line in enumerate(lines, start=1):
         if not line.strip():
             continue
-        item = json.loads(line)
-        if item.get("event") == "move" and item.get("batch_id") == batch_id:
-            records.append(
-                HistoryRecord(
-                    batch_id,
-                    int(item["operation_id"]),
-                    item["source"],
-                    item["destination"],
-                    item["sha256"],
-                    item["timestamp"],
-                )
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"corrupt history at line {line_number}: {exc.msg}") from exc
+        if not isinstance(item, dict):
+            raise ValueError(f"invalid history record at line {line_number}: expected an object")
+        if item.get("event") != "move" or item.get("batch_id") != batch_id:
+            continue
+        try:
+            record = HistoryRecord(
+                batch_id,
+                int(item["operation_id"]),
+                str(item["source"]),
+                str(item["destination"]),
+                str(item["sha256"]),
+                str(item["timestamp"]),
             )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"invalid move record at line {line_number}: {exc}") from exc
+        records.append(record)
     if not records:
         raise ValueError(f"batch not found: {batch_id}")
     return tuple(sorted(records, key=lambda record: record.operation_id, reverse=True))
@@ -134,17 +146,26 @@ def rollback_batch(history_path: Path, batch_id: str, *, confirm: bool = False, 
         if not destination.is_file():
             results.append({"operation_id": record.operation_id, "status": "missing", "source": str(source), "destination": str(destination), "detail": "moved file is no longer at its recorded destination"})
             continue
-        if _sha256(destination) != record.sha256:
+        try:
+            digest = _sha256(destination)
+        except OSError as exc:
+            results.append({"operation_id": record.operation_id, "status": "error", "source": str(source), "destination": str(destination), "detail": f"could not verify destination contents: {exc}"})
+            continue
+        if digest != record.sha256:
             results.append({"operation_id": record.operation_id, "status": "conflict", "source": str(source), "destination": str(destination), "detail": "destination contents changed since the move"})
             continue
-        if source.exists():
+        if source.exists() or source.is_symlink():
             results.append({"operation_id": record.operation_id, "status": "conflict", "source": str(source), "destination": str(destination), "detail": "original source path is occupied"})
             continue
         if dry_run:
             results.append({"operation_id": record.operation_id, "status": "planned", "source": str(source), "destination": str(destination), "detail": "safe to restore"})
             continue
-        source.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(destination), str(source))
+        try:
+            source.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(destination), str(source))
+        except OSError as exc:
+            results.append({"operation_id": record.operation_id, "status": "error", "source": str(source), "destination": str(destination), "detail": f"restore failed without overwriting the source: {exc}"})
+            continue
         results.append({"operation_id": record.operation_id, "status": "restored", "source": str(source), "destination": str(destination), "detail": "hash verified before restore"})
     return tuple(results)
 
