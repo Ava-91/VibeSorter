@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vibesorter"
 version = "0.8.1"
-description = "A local, lightweight image organizer that groups photos by visual vibes."
+description = "Local-first image organizer using a deterministic feature-based heuristic classifier."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}

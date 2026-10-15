@@ -2,7 +2,7 @@
 
 > **Find the visual character of your image library.**
 >
-> VibeSorter is a local-first Python image organizer that analyzes independent visual attributes, overlapping aesthetic vibes, and confidence signals. It keeps analysis local, stores reusable results in SQLite, and separates safe discovery from explicit filesystem changes.
+> VibeSorter is a local-first Python image organizer with a deterministic, feature-based heuristic classifier. It estimates independent visual attributes and overlapping aesthetic vibes, stores reusable results in SQLite, and separates safe discovery from explicit filesystem changes. It does not use a neural network or a remote AI service for its default predictions.
 
 ## What it classifies
 
@@ -21,7 +21,7 @@ These families are independent. Compound labels are not part of the canonical mo
 
 ## How it works
 
-The detector uses lightweight local image features including brightness, saturation, contrast, warm/cool balance, grayscale content, dark/light ratios, dominant colors, text likelihood, and spatial features. Semantic classification stores an `ImageProfile` with confidence and provenance for each attribute.
+The default classifier is a deterministic heuristic built from lightweight local image features: brightness, saturation, contrast, warm/cool balance, grayscale content, dark/light ratios, dominant colors, text likelihood, and spatial features. Its aesthetic labels are subjective approximations, not objective facts about an image. A confidence value is an internal score derived from heuristic strength and separation from alternatives; it is **not** a calibrated probability that the label is correct. Similar images can receive different labels, and unfamiliar styles or mixed scenes may be misclassified. Semantic classification stores an `ImageProfile` with per-attribute heuristic confidence and provenance. An optional learned classifier can be fitted from user-provided labels; it is a separate workflow and its quality depends on the quality and representativeness of those labels.
 
 Repeated analysis persists raw features and structured profiles in the local SQLite cache at `.vibesorter/analysis.db`. Cached search and browser filtering operate on stored data without rescanning source images.
 
@@ -413,3 +413,8 @@ Rollback checks each recorded destination's SHA-256 before restoring it and refu
 ## Classifier evaluation baseline
 
 The evaluation command reports accuracy, per-vibe precision/recall/F1/support, a confusion matrix, ambiguity, and confidence calibration. Follow [the versioned human-labeling protocol](docs/evaluation-baseline-v1.md) before publishing a score. Model predictions are never ground truth; the repository does not claim a release-quality real-world benchmark until a representative human-labelled dataset and image manifest are committed.
+
+
+## Classifier limitations
+
+VibeSorter is a sorting aid, not an image-understanding authority. It does not infer personal identity, intent, location, or cultural context. The default classifier uses hand-designed visual features and deterministic scoring; it is not a trained deep-learning model. Vibe names such as `dreamy`, `cozy`, and `edgy` are inherently subjective. Scores and confidence are useful for ranking and deciding which items need human review, but they must not be presented as calibrated correctness probabilities. Evaluate changes only against a versioned, human-labelled holdout set; do not treat generated predictions as ground truth.

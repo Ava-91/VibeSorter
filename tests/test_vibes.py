@@ -121,3 +121,8 @@ def test_canonical_vibes_never_emit_compound_labels() -> None:
         )
     ):
         assert score.name not in forbidden
+
+
+
+def test_confidence_score_is_explicitly_not_a_probability() -> None:
+    assert "not a calibrated probability" in (confidence_score.__doc__ or "")
