@@ -34,3 +34,34 @@ def test_browser_list_payload_includes_profile_when_available(tmp_path: Path):
         conn.commit()
     rows, _ = _query_rows(db, {}, limit=10, offset=0)
     assert rows[0]["profile"]["brightness"]["value"] == "dark"
+
+
+def test_large_profile_filter_is_paginated_in_sqlite(tmp_path: Path, monkeypatch):
+    import vibesorter.browser.server as server
+
+    db = tmp_path / "large-analysis.db"
+    blue_profile = ImageProfile(colors=(AttributeValue("blue", 0.9),)).to_json()
+    red_profile = ImageProfile(colors=(AttributeValue("red", 0.9),)).to_json()
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE images (path TEXT PRIMARY KEY, size INTEGER, mtime_ns INTEGER, features TEXT, scores TEXT)")
+        conn.execute("CREATE TABLE profiles (path TEXT PRIMARY KEY, taxonomy_version TEXT, profile TEXT)")
+        image_rows = []
+        profile_rows = []
+        for index in range(5000):
+            path = f"image-{index:05}.png"
+            image_rows.append((path, 1, 1, "{}", "[]"))
+            profile_rows.append((path, "2.0", blue_profile if index % 2 == 0 else red_profile))
+        conn.executemany("INSERT INTO images VALUES (?, ?, ?, ?, ?)", image_rows)
+        conn.executemany("INSERT INTO profiles VALUES (?, ?, ?)", profile_rows)
+        conn.commit()
+
+    def unexpected_per_row_lookup(*_args, **_kwargs):
+        raise AssertionError("profile filtering must not perform one query per result row")
+
+    monkeypatch.setattr(server, "_profile_for", unexpected_per_row_lookup)
+    rows, total = _query_rows(db, {"colors": ["blue"]}, limit=12, offset=20)
+
+    assert total == 2500
+    assert len(rows) == 12
+    assert rows[0]["path"] == "image-00040.png"
+    assert all(row["profile"]["colors"][0]["value"] == "blue" for row in rows)
