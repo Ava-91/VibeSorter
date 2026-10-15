@@ -8,7 +8,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from uuid import uuid4
 
-from . import __version__
 from .cache import AnalysisCache
 from .duplicates import (
     DEFAULT_MAX_DISTANCE,
@@ -74,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
   Undo a batch:        vibesorter rollback BATCH_ID --confirm
 
 Read-only commands never modify your images. Filesystem changes require explicit --confirm.""")
-    parser.add_argument("--version", action="version", version=f"VibeSorter {__version__}")
+    parser.add_argument("--version", action="version", version="VibeSorter 0.8.1")
     subparsers = parser.add_subparsers(dest="command", required=True, title="commands", metavar="COMMAND")
     scan = subparsers.add_parser("scan", help="Discover supported images (read-only).", description="List supported images without analyzing or changing them."); _add_folder_argument(scan)
     preview = subparsers.add_parser("preview", help="Analyze a folder and show its vibe distribution.", description="Analyze images locally and print their detected vibe, confidence, and path."); _add_folder_argument(preview); _add_workers_argument(preview); _add_filter_arguments(preview); preview.add_argument("--top", type=int, default=5, help="Examples to print per vibe (default: 5)."); preview.add_argument("--json", action="store_true", help="Print machine-readable JSON.")

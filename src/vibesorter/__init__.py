@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-__version__ = "0.8.1"
-
 from .pillow_compat import install as _install_pillow_compat
 
 _install_pillow_compat()

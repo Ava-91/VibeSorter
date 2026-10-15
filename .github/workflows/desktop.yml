@@ -137,6 +137,43 @@ jobs:
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
           }
 
+      - name: Upgrade the installed Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-ChildItem 'src-tauri/target' -Recurse -File -Filter '*.exe' |
+            Where-Object { $_.FullName -match '[\\\\/]release[\\\\/]bundle[\\\\/]nsis[\\\\/]' } |
+            Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer was not produced for upgrade test.' }
+          $installRoot = Join-Path $env:RUNNER_TEMP 'vibesorter-clean-install'
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Upgrade/reinstall failed with exit code $($install.ExitCode)." }
+          $app = Get-ChildItem $installRoot -Recurse -File -Filter 'vibesorter-desktop.exe' | Select-Object -First 1
+          if (-not $app) { throw 'Application executable missing after upgrade/reinstall.' }
+          $process = Start-Process -FilePath $app.FullName -PassThru
+          try {
+            Start-Sleep -Seconds 5
+            $process.Refresh()
+            if ($process.HasExited) { throw "Upgraded app exited during startup with code $($process.ExitCode)." }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+
+      - name: Uninstall the Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installRoot = Join-Path $env:RUNNER_TEMP 'vibesorter-clean-install'
+          $uninstaller = Get-ChildItem $installRoot -Recurse -File -Filter 'uninstall.exe' | Select-Object -First 1
+          if (-not $uninstaller) { throw 'Silent uninstaller was not found.' }
+          $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList @('/S') -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller failed with exit code $($uninstall.ExitCode)." }
+          Start-Sleep -Seconds 2
+          $remainingApp = Get-ChildItem $installRoot -Recurse -File -Filter 'vibesorter-desktop.exe' -ErrorAction SilentlyContinue
+          if ($remainingApp) { throw 'Application executable remains after uninstall.' }
+
       - name: Inspect desktop bundle sizes
         shell: python
         run: |
