@@ -418,3 +418,6 @@ The evaluation command reports accuracy, per-vibe precision/recall/F1/support, a
 ## Classifier limitations
 
 VibeSorter is a sorting aid, not an image-understanding authority. It does not infer personal identity, intent, location, or cultural context. The default classifier uses hand-designed visual features and deterministic scoring; it is not a trained deep-learning model. Vibe names such as `dreamy`, `cozy`, and `edgy` are inherently subjective. Scores and confidence are useful for ranking and deciding which items need human review, but they must not be presented as calibrated correctness probabilities. Evaluate changes only against a versioned, human-labelled holdout set; do not treat generated predictions as ground truth.
+
+
+Version bumps must update the Python project/runtime and both Tauri version declarations together; see [the version synchronization checklist](docs/versioning.md). CI tests that these values remain identical.
