@@ -31,6 +31,29 @@ class ScannerTests(unittest.TestCase):
 
             self.assertEqual(find_images(root, recursive=False), [root / "one.jpg"])
 
+    def test_find_images_excludes_vibesorter_managed_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = root / "original.jpg"
+            original.touch()
+            managed = root / ".vibesorter" / "thumbnails"
+            managed.mkdir(parents=True)
+            (managed / "generated.jpg").touch()
+            nested_managed = root / "nested" / ".VIBESORTER" / "thumbnails"
+            nested_managed.mkdir(parents=True)
+            (nested_managed / "generated-again.png").touch()
+            (root / "nested").mkdir(exist_ok=True)
+            (root / "nested" / "real.jpg").touch()
+
+            expected = sorted(
+                [original, root / "nested" / "real.jpg"],
+                key=lambda path: str(path).casefold(),
+            )
+            self.assertEqual(find_images(root), expected)
+            # Repeated scans remain stable; generated thumbnails are never
+            # promoted into the source image set.
+            self.assertEqual(find_images(root), expected)
+
     def test_find_images_rejects_missing_folder(self) -> None:
         with (
             tempfile.TemporaryDirectory() as directory,
