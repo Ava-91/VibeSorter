@@ -1,4 +1,7 @@
+import json
 from pathlib import Path
+
+import pytest
 
 from vibesorter.operations import apply_reviewed
 from vibesorter.proposal import MoveOperation
@@ -92,3 +95,71 @@ def test_duplicate_destinations_block_all_moves(tmp_path: Path) -> None:
     assert [result.status for result in results] == ["unsafe_path", "unsafe_path"]
     assert first.read_bytes() == b"a" and second.read_bytes() == b"b"
     assert not destination.exists()
+
+
+
+def _two_file_batch(tmp_path: Path):
+    library = tmp_path / "library"
+    library.mkdir()
+    first, second = library / "first.jpg", library / "second.jpg"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    output = tmp_path / "sorted"
+    reviewed = (
+        reviewed_move(first, output / "first.jpg", 0.9),
+        reviewed_move(second, output / "second.jpg", 0.9, 2),
+    )
+    return library, output, first, second, reviewed
+
+
+def test_failed_later_move_rolls_back_prior_moves_and_removes_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import vibesorter.operations as operations
+
+    library, output, first, second, reviewed = _two_file_batch(tmp_path)
+    journal = tmp_path / "history.pending.jsonl"
+    real_move = operations.shutil.move
+    calls = 0
+
+    def fail_second_move(source, destination):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("simulated second move failure")
+        return real_move(source, destination)
+
+    monkeypatch.setattr(operations.shutil, "move", fail_second_move)
+    with pytest.raises(OSError, match="batch apply failed"):
+        apply_reviewed(reviewed, confirm=True, source_root=library, output_root=output, journal_path=journal, batch_id="batch-fail")
+
+    assert first.read_bytes() == b"first" and second.read_bytes() == b"second"
+    assert not (output / "first.jpg").exists()
+    assert not journal.exists()
+
+
+def test_incomplete_rollback_preserves_recovery_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import vibesorter.operations as operations
+
+    library, output, first, second, reviewed = _two_file_batch(tmp_path)
+    journal = tmp_path / "history.pending.jsonl"
+    real_move = operations.shutil.move
+    calls = 0
+
+    def fail_move_and_rollback(source, destination):
+        nonlocal calls
+        calls += 1
+        if calls in {2, 3}:
+            raise OSError("simulated move/rollback failure")
+        return real_move(source, destination)
+
+    monkeypatch.setattr(operations.shutil, "move", fail_move_and_rollback)
+    with pytest.raises(OSError, match="rollback incomplete") as error:
+        apply_reviewed(reviewed, confirm=True, source_root=library, output_root=output, journal_path=journal, batch_id="batch-recovery")
+
+    assert "recovery journal preserved" in str(error.value)
+    assert journal.is_file()
+    entries = [json.loads(line) for line in journal.read_text(encoding="utf-8").splitlines()]
+    assert len(entries) == 1
+    assert entries[0]["operation_id"] == 1
+    assert entries[0]["batch_id"] == "batch-recovery"
+    assert not first.exists() and (output / "first.jpg").read_bytes() == b"first"
+    assert second.read_bytes() == b"second"
