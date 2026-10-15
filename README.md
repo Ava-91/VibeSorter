@@ -408,3 +408,8 @@ Requests are checked against the Host header; state-changing labeling requests r
 
 
 Rollback checks each recorded destination's SHA-256 before restoring it and refuses to overwrite occupied original paths. Missing files, modified contents, permission failures, and per-file restore errors are reported individually so other safe restores can continue. Corrupt history is rejected with a line number. If a rollback or apply fails, inspect the reported recovery-journal path and the source/destination paths before retrying; never delete a pending journal until the moved files have been reconciled.
+
+
+## Classifier evaluation baseline
+
+The evaluation command reports accuracy, per-vibe precision/recall/F1/support, a confusion matrix, ambiguity, and confidence calibration. Follow [the versioned human-labeling protocol](docs/evaluation-baseline-v1.md) before publishing a score. Model predictions are never ground truth; the repository does not claim a release-quality real-world benchmark until a representative human-labelled dataset and image manifest are committed.
