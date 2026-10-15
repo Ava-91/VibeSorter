@@ -35,12 +35,9 @@ def index_folder(
         progress({"phase": "scan", "total": len(images)})
 
     with VerifiedAnalysisCache(cache_path) as cache:
-        pending: list[Path] = []
-        for image in images:
-            if cache.get_verified(image) is None:
-                pending.append(image)
-            else:
-                reused += 1
+        verified_paths = cache.get_verified_many(images)
+        reused = len(verified_paths)
+        pending = [image for image in images if image.expanduser() not in verified_paths]
 
         if progress:
             progress({"phase": "analyze", "total": len(images), "pending": len(pending), "reused": reused})
