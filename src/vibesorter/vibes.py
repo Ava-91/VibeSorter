@@ -147,6 +147,7 @@ def select_vibes(
 def confidence_score(
     scores: tuple[VibeScore, ...], *, margin_scale: float = CONFIDENCE_MARGIN_SCALE
 ) -> float:
+    """Return a bounded heuristic ranking signal, not a calibrated probability."""
     if not scores:
         return 0.0
     if margin_scale <= 0:

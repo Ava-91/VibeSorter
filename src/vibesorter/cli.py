@@ -61,7 +61,7 @@ def _add_dimension_arguments(command: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="vibesorter", formatter_class=argparse.RawDescriptionHelpFormatter, description="Detect visual vibes in local images and safely organize large image libraries.", epilog="""Workflow examples:
+    parser = argparse.ArgumentParser(prog="vibesorter", formatter_class=argparse.RawDescriptionHelpFormatter, description="Organize local images with a deterministic feature-based heuristic classifier; predictions are subjective scores, not calibrated probabilities.", epilog="""Workflow examples:
   Analyze a library:   vibesorter preview ./photos
   Search the cache:    vibesorter search ./photos --vibe 'Dark / Moody'
   Inspect one image:   vibesorter analyze ./photo.jpg
