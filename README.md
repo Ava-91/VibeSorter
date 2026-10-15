@@ -367,3 +367,12 @@ The multidimensional taxonomy migration is complete. The canonical model is stab
 ## License
 
 See [LICENSE](LICENSE).
+
+
+### Browser query benchmark
+
+Measure SQLite-backed profile filtering and pagination on a synthetic cached library (no image files or network required):
+
+    python scripts/benchmark_browser_profiles.py --rows 50000
+
+The benchmark reports filtered result count, page size, and elapsed query time. The browser applies supported profile filters, counts, ordering, and pagination in SQLite, and loads profile JSON only for the returned page.

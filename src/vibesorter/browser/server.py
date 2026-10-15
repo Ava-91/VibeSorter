@@ -177,14 +177,61 @@ def _query_rows(
         values: list[str] = []
         if query_text:
             if has_profiles:
-                where.append(f"(LOWER({columns['path']}) LIKE ? OR EXISTS (SELECT 1 FROM profiles AS p WHERE p.path = {table}.{columns['path']} AND LOWER(p.profile) LIKE ?))")
+                where.append(f"(LOWER({columns['path']}) LIKE ? OR EXISTS (SELECT 1 FROM profiles AS qpf WHERE qpf.path = {table}.{columns['path']} AND LOWER(qpf.profile) LIKE ?))")
                 values.extend([f"%{query_text}%", f"%{query_text}%"])
             else:
                 where.append(f"LOWER({columns['path']}) LIKE ?")
                 values.append(f"%{query_text}%")
-        if vibe and columns.get("vibe"):
+        if vibe and columns.get("vibe") and columns.get("scores"):
+            where.append(
+                f"(LOWER({columns['vibe']}) = ? OR EXISTS (SELECT 1 FROM json_each("
+                f"CASE WHEN json_valid({columns['scores']}) THEN {columns['scores']} ELSE '[]' END) AS score "
+                "WHERE LOWER(json_extract(CASE WHEN json_valid(score.value) THEN score.value ELSE '{}' END, '$.name')) = ?))"
+            )
+            values.extend([vibe, vibe])
+        elif vibe and columns.get("vibe"):
             where.append(f"LOWER({columns['vibe']}) = ?")
             values.append(vibe)
+        elif vibe and columns.get("scores"):
+            where.append(
+                f"EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid({columns['scores']}) THEN {columns['scores']} ELSE '[]' END) AS score "
+                "WHERE LOWER(json_extract(CASE WHEN json_valid(score.value) THEN score.value ELSE '{}' END, '$.name')) = ?)"
+            )
+            values.append(vibe)
+        elif vibe:
+            where.append("0")
+
+        selected_profiles = {family: _selected(params, family) for family in ATTRIBUTE_FAMILIES}
+        profile_filtered = any(selected_profiles.values())
+        if profile_filtered and not has_profiles:
+            where.append("0")
+        elif profile_filtered:
+            for family in ("media_type", "temperature", "saturation", "brightness"):
+                wanted = selected_profiles[family]
+                if wanted:
+                    expression = (
+                        "LOWER(COALESCE(json_extract("
+                        "CASE WHEN json_valid(pf.profile) THEN pf.profile ELSE '{}' END, "
+                        f"'$.{family}.value'), ''))"
+                    )
+                    placeholders = ",".join("?" for _ in wanted)
+                    where.append(
+                        f"EXISTS (SELECT 1 FROM profiles AS pf WHERE pf.path = {table}.{columns['path']} "
+                        f"AND {expression} IN ({placeholders}))"
+                    )
+                    values.extend(wanted)
+            for family in ("colors", "vibes"):
+                wanted = selected_profiles[family]
+                if wanted:
+                    placeholders = ",".join("?" for _ in wanted)
+                    where.append(
+                        f"EXISTS (SELECT 1 FROM profiles AS pf WHERE pf.path = {table}.{columns['path']} "
+                        f"AND EXISTS (SELECT 1 FROM json_each("
+                        f"CASE WHEN json_valid(pf.profile) THEN pf.profile ELSE '{{}}' END, '$.{family}') AS attr "
+                        f"WHERE LOWER(CASE WHEN json_valid(attr.value) THEN "
+                        f"json_extract(attr.value, '$.value') ELSE '' END) IN ({placeholders})))"
+                    )
+                    values.extend(wanted)
         sort = (params.get("sort", ["path"])[0] or "path").casefold()
         direction = "DESC" if (params.get("direction", ["asc"])[0] or "asc").casefold() == "desc" else "ASC"
         sort_columns = {"path": columns["path"]}
@@ -193,38 +240,30 @@ def _query_rows(
         if columns.get("mtime_ns"): sort_columns["modified"] = columns["mtime_ns"]
         sort_column = sort_columns.get(sort, columns["path"])
         collation = " COLLATE NOCASE" if sort == "path" else ""
+        if has_profiles:
+            select_columns.append(
+                f"(SELECT p.profile FROM profiles AS p WHERE p.path = {table}.{columns['path']} LIMIT 1) AS _profile_json"
+            )
         sql = f"SELECT {', '.join(select_columns)} FROM {table}"
         if where:
             sql += " WHERE " + " AND ".join(where)
         sql += f" ORDER BY {sort_column}{collation} {direction}, {columns['path']} COLLATE NOCASE"
-        profile_filtered = any(_selected(params, family) for family in ATTRIBUTE_FAMILIES)
-        sql_can_paginate = not profile_filtered and (not vibe or bool(columns.get("vibe")))
-        total: int | None = None
-        if sql_can_paginate:
-            count_sql = f"SELECT COUNT(*) FROM {table}"
-            if where:
-                count_sql += " WHERE " + " AND ".join(where)
-            total = int(conn.execute(count_sql, values).fetchone()[0])
-            sql += " LIMIT ? OFFSET ?"
-            rows = conn.execute(sql, [*values, limit, offset]).fetchall()
-        else:
-            rows = conn.execute(sql, values).fetchall()
+        count_sql = f"SELECT COUNT(*) FROM {table}"
+        if where:
+            count_sql += " WHERE " + " AND ".join(where)
+        total = int(conn.execute(count_sql, values).fetchone()[0])
+        rows = conn.execute(sql + " LIMIT ? OFFSET ?", [*values, limit, offset]).fetchall()
         matches: list[dict] = []
         for row in rows:
             item = _normalize_row(row, columns)
-            if vibe and str(item.get("vibe") or "").casefold() != vibe:
-                parsed = _parse_scores(item.get(columns.get("scores", ""))) if columns.get("scores") else ()
-                if not any(score.name.casefold() == vibe for score in parsed):
-                    continue
-            profile = _profile_for(conn, item["path"])
-            item["profile"] = profile.to_dict() if profile else None
-            if not _profile_matches(profile, params):
-                continue
+            raw_profile = item.pop("_profile_json", None)
+            try:
+                profile = ImageProfile.from_json(raw_profile) if raw_profile else None
+            except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+                profile = None
             item["profile"] = profile.to_dict() if profile else None
             matches.append(item)
-        if total is not None:
-            return matches, total
-        return matches[offset : offset + limit], len(matches)
+        return matches, total
 
 
 def _rows(db_path: Path, vibe: str | None, query: str | None) -> list[dict]:
