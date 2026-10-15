@@ -260,21 +260,37 @@ def _run_apply(args, parser) -> int:
     except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
         parser.error(f"invalid reviewed proposal: {exc}")
 
-    results = apply_reviewed(
-        reviewed,
-        confirm=args.confirm and not args.dry_run,
-        dry_run=args.dry_run,
-        source_root=proposal.source_root,
-        output_root=proposal.output_root,
+    real_apply = args.confirm and not args.dry_run
+    batch_id = str(uuid4()) if real_apply else None
+    journal_path = (
+        args.history.expanduser().with_name(f".{args.history.name}.{batch_id}.pending.jsonl")
+        if batch_id is not None else None
     )
+    try:
+        results = apply_reviewed(
+            reviewed,
+            confirm=real_apply,
+            dry_run=args.dry_run,
+            source_root=proposal.source_root,
+            output_root=proposal.output_root,
+            journal_path=journal_path,
+            batch_id=batch_id or "",
+        )
+    except OSError as exc:
+        parser.error(str(exc))
     moved = tuple(result for result in results if result.status == "moved")
-    batch_id = None
-    if args.confirm and not args.dry_run and moved:
-        batch_id = str(uuid4())
+    if real_apply and moved and batch_id is not None:
         try:
             record_batch(batch_id, results, args.history)
         except OSError as exc:
+            if journal_path is not None and all(result.source.is_file() and not result.destination.exists() for result in moved):
+                journal_path.unlink(missing_ok=True)
             parser.error(f"apply was rolled back because history could not be recorded: {exc}")
+        else:
+            if journal_path is not None:
+                journal_path.unlink(missing_ok=True)
+    elif journal_path is not None:
+        journal_path.unlink(missing_ok=True)
 
     if args.json:
         payload = {

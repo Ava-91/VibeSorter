@@ -324,7 +324,7 @@ print(profile.to_dict())
 
 Analysis, search, statistics, duplicate checks, proposals, reviews, and browser views are local and read-only with respect to the source library. Filesystem changes require explicit confirmation.
 
-Apply history is written atomically. If durable history cannot be committed after a move, VibeSorter attempts to restore the just-moved files instead of silently leaving filesystem changes without an audit record.
+Each successful move is first appended and flushed to a per-batch pending recovery journal. If a later move fails, VibeSorter attempts to restore completed moves in reverse order. The pending journal is removed after a complete rollback or after the final history record is committed; if rollback is incomplete, the journal is preserved and its path is included in the error so the remaining moves can be recovered manually. The final history file is committed atomically.
 
 VibeSorter is local-first: source images are not uploaded to a third-party AI service by the project.
 
