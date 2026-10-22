@@ -17,7 +17,7 @@ The canonical taxonomy is:
 - **Brightness:** bright, mid, dark
 - **Vibes:** retro, dreamy, soft, moody, minimal, cozy, cinematic, playful, edgy, romantic (multi-valued)
 
-These families are independent. Compound labels are not part of the canonical model.
+These families are independent. Compound labels are not part of the canonical model. **Media-type prediction limitation:** the current heuristic automatically predicts only photograph, screenshot, or graphic. Illustration and collage are valid taxonomy values for stored or manually supplied profiles, but the default classifier does not yet predict them. Automatic support should only be added after it is evaluated on a representative human-labeled set.
 
 ## How it works
 
