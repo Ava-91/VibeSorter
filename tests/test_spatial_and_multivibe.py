@@ -24,6 +24,7 @@ def test_spatial_features_detect_a_bright_center(tmp_path):
     )
     assert len(features.regions) == 4
     assert features.center_brightness_delta > 0.5
+    assert features.center_saturation_delta > 0
 
 
 def test_spatial_features_do_not_mistake_bright_corner_for_center(tmp_path):
