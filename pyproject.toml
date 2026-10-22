@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
 authors = [{name = "Ava"}]
-dependencies = ["Pillow>=12.1"]
+dependencies = ["Pillow>=13.0.0"]
 
 [project.optional-dependencies]
 dev = [
