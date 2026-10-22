@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from vibesorter.classifier import classify_profile
+from vibesorter.classifier import AUTO_PREDICTED_MEDIA_TYPES, classify_profile
 from vibesorter.features import ColorSample, ImageFeatures
+from vibesorter.taxonomy import MediaType
 
 
 def features(**overrides) -> ImageFeatures:
@@ -48,3 +49,21 @@ def test_classifier_returns_profile_not_single_vibe():
     assert profile.temperature is not None
     assert profile.saturation is not None
     assert profile.brightness is not None
+
+
+
+def test_media_type_taxonomy_distinguishes_auto_predictions_from_manual_values():
+    taxonomy_values = {item.value for item in MediaType}
+    assert AUTO_PREDICTED_MEDIA_TYPES <= taxonomy_values
+    assert taxonomy_values - AUTO_PREDICTED_MEDIA_TYPES == {"illustration", "collage"}
+    assert classify_profile(features(text_likelihood=0.05)).media_type.value == "photograph"
+
+
+
+def test_classifier_only_emits_declared_automatic_media_types():
+    for sample in (
+        features(text_likelihood=0.05, grayscale_ratio=0.05),
+        features(text_likelihood=0.75, grayscale_ratio=0.10),
+        features(text_likelihood=0.90, grayscale_ratio=0.80),
+    ):
+        assert classify_profile(sample).media_type.value in AUTO_PREDICTED_MEDIA_TYPES
