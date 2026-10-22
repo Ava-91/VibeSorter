@@ -82,6 +82,111 @@ def _metrics(labels: tuple[LabelledImage, ...], predictor) -> ClassificationMetr
     )
 
 
+
+@dataclass(frozen=True, slots=True)
+class MultiLabelledImage:
+    """Human-assigned set of applicable vibes for one image."""
+
+    path: Path
+    labels: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MultiLabelMetrics:
+    total: int
+    exact_match: float
+    micro_precision: float
+    micro_recall: float
+    micro_f1: float
+    macro_f1: float
+    per_vibe: dict[str, dict[str, float | int]]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def load_multilabel_labels(path: str | Path) -> tuple[MultiLabelledImage, ...]:
+    """Load JSONL records shaped as {path: ..., labels: [canonical vibe, ...]}."""
+    records = []
+    for line_number, line in enumerate(
+        Path(path).expanduser().read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not line.strip():
+            continue
+        try:
+            data = json.loads(line)
+            image_path = Path(data["path"]).expanduser()
+            raw_labels = data["labels"]
+            if not isinstance(raw_labels, list) or not raw_labels:
+                raise ValueError("labels must be a non-empty list")
+            labels = tuple(str(label) for label in raw_labels)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"invalid multi-label evaluation record on line {line_number}") from exc
+        if any(label not in CANONICAL_VIBES for label in labels):
+            raise ValueError(f"unknown vibe label on line {line_number}")
+        if len(set(labels)) != len(labels):
+            raise ValueError(f"duplicate vibe label on line {line_number}")
+        records.append(MultiLabelledImage(image_path, labels))
+    return tuple(records)
+
+
+def evaluate_multilabel_labels(
+    labels: tuple[MultiLabelledImage, ...],
+    *,
+    threshold: float = 0.45,
+    margin: float = 0.10,
+) -> MultiLabelMetrics:
+    """Evaluate the product's multi-vibe selector against human multi-labels."""
+    from .vibes import select_vibes
+
+    counts = {vibe: {"tp": 0, "fp": 0, "fn": 0, "support": 0} for vibe in CANONICAL_VIBES}
+    exact_matches = 0
+    for item in labels:
+        actual = set(item.labels)
+        scores = score_vibes(extract_features(item.path))
+        predicted = {score.name for score in select_vibes(scores, threshold=threshold, margin=margin)}
+        exact_matches += predicted == actual
+        for vibe in CANONICAL_VIBES:
+            counts[vibe]["support"] += vibe in actual
+            counts[vibe]["tp"] += vibe in actual and vibe in predicted
+            counts[vibe]["fp"] += vibe not in actual and vibe in predicted
+            counts[vibe]["fn"] += vibe in actual and vibe not in predicted
+
+    per_vibe = {}
+    macro_f1_values = []
+    tp_total = fp_total = fn_total = 0
+    for vibe, count in counts.items():
+        tp, fp, fn = count["tp"], count["fp"], count["fn"]
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        per_vibe[vibe] = {
+            "support": count["support"],
+            "precision": round(precision, 4),
+            "recall": round(recall, 4),
+            "f1": round(f1, 4),
+        }
+        macro_f1_values.append(f1)
+        tp_total += tp
+        fp_total += fp
+        fn_total += fn
+    micro_precision = tp_total / (tp_total + fp_total) if tp_total + fp_total else 0.0
+    micro_recall = tp_total / (tp_total + fn_total) if tp_total + fn_total else 0.0
+    micro_f1 = (
+        2 * micro_precision * micro_recall / (micro_precision + micro_recall)
+        if micro_precision + micro_recall else 0.0
+    )
+    return MultiLabelMetrics(
+        total=len(labels),
+        exact_match=round(exact_matches / len(labels), 4) if labels else 0.0,
+        micro_precision=round(micro_precision, 4),
+        micro_recall=round(micro_recall, 4),
+        micro_f1=round(micro_f1, 4),
+        macro_f1=round(sum(macro_f1_values) / len(macro_f1_values), 4) if macro_f1_values else 0.0,
+        per_vibe=per_vibe,
+    )
+
+
 def evaluate_labels(labels: tuple[LabelledImage, ...]) -> ClassificationMetrics:
     """Evaluate the deterministic heuristic classifier against human labels."""
     return _metrics(labels, lambda path: classify(extract_features(path)))
