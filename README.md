@@ -203,6 +203,22 @@ vibesorter search "path/to/photos" --path "billie"
 vibesorter search "path/to/photos" --min-brightness 0.65 --max-saturation 0.75 --limit 50
 ```
 
+Filter stored profile attributes (multiple `--color` or `--profile-vibe` values are ORed within that attribute family):
+
+```bash
+vibesorter search "path/to/photos" --media-type photograph --color blue --color red --temperature cool
+vibesorter search "path/to/photos" --saturation-label muted --brightness-label dark --profile-vibe dreamy
+vibesorter search "path/to/photos" --vibe dreamy --include-secondary-vibes
+```
+
+To review close calls, filter for a small gap between the top two vibe scores:
+
+```bash
+vibesorter search "path/to/photos" --uncertain-margin 0.08
+```
+
+This last option is a heuristic review signal, **not** a calibrated probability. Results still require human judgment.
+
 Search never modifies source images.
 
 ### 6. Check duplicates
