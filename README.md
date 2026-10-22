@@ -441,7 +441,7 @@ Version bumps must update the Python project/runtime and both Tauri version decl
 
 ## Desktop platform support
 
-The supported OS/architecture matrix, known limitations, signing/notarization status, and install/upgrade/uninstall acceptance process are documented in [the desktop platform policy](docs/platform-support-and-signing.md). Intel macOS is not a v1.0 target, and current Windows/macOS release artifacts are unsigned/not notarized unless the release workflow is explicitly updated and verified.
+The supported OS/architecture matrix, known limitations, signing/notarization status, and install/upgrade/uninstall acceptance process are documented in [the desktop platform policy](docs/platform-support-and-signing.md). First-run setup, local data paths, backup/reset/uninstall, privacy, and troubleshooting are documented in [the data lifecycle guide](docs/data-lifecycle-and-troubleshooting.md). Intel macOS is not a v1.0 target, and current Windows/macOS release artifacts are unsigned/not notarized unless the release workflow is explicitly updated and verified.
 
 
 Version bumps must update the Python project/runtime and both Tauri version declarations together; see [the version synchronization checklist](docs/versioning.md). CI tests that these values remain identical.
