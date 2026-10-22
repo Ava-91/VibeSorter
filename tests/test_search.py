@@ -133,3 +133,42 @@ def test_search_combines_families_and_allows_multiple_colors_and_vibes(tmp_path:
     cache.save()
     query = ImageQuery(media_type="photograph", colors=("red", "blue"), temperature="cool", vibes=("retro", "moody"))
     assert search_cache(cache, query)[0].path == red_cool
+
+
+
+def test_search_filters_profile_dimensions_and_uncertain_margin(tmp_path: Path) -> None:
+    close, decisive = tmp_path / "close.jpg", tmp_path / "decisive.jpg"
+    close.write_bytes(b"close")
+    decisive.write_bytes(b"decisive")
+    cache = AnalysisCache(tmp_path / "analysis.json")
+    close_result = result(close, vibe="retro", score=0.75)
+    decisive_result = result(decisive, vibe="retro", score=0.9)
+    # Give the first image a close runner-up and the second a decisive margin.
+    close_result = AnalysisResult(close, close_result.features, close_result.best, (VibeScore("retro", 0.75), VibeScore("soft", 0.70)), cached=True)
+    decisive_result = AnalysisResult(decisive, decisive_result.features, decisive_result.best, (VibeScore("retro", 0.90), VibeScore("soft", 0.20)), cached=True)
+    seed(cache, close_result, decisive_result)
+    cache.set_profile(
+        close,
+        ImageProfile(
+            media_type=AttributeValue("illustration", 0.8),
+            colors=(AttributeValue("red", 0.9),),
+            temperature=AttributeValue("cool", 0.8),
+            saturation=AttributeValue("muted", 0.8),
+            brightness=AttributeValue("dark", 0.8),
+            vibes=(AttributeValue("retro", 0.7), AttributeValue("soft", 0.7)),
+        ),
+    )
+    cache.set_profile(
+        decisive,
+        ImageProfile(
+            media_type=AttributeValue("photograph", 0.8),
+            colors=(AttributeValue("blue", 0.9),),
+            temperature=AttributeValue("warm", 0.8),
+            saturation=AttributeValue("vibrant", 0.8),
+            brightness=AttributeValue("bright", 0.8),
+            vibes=(AttributeValue("retro", 0.9),),
+        ),
+    )
+    cache.save()
+    assert [item.path for item in search_cache(cache, ImageQuery(media_type="illustration", colors=("red",)))] == [close]
+    assert [item.path for item in search_cache(cache, ImageQuery(max_vibe_margin=0.1))] == [close]
