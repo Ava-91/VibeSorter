@@ -37,7 +37,7 @@ def test_browser_list_payload_includes_profile_when_available(tmp_path: Path):
 
 
 def test_large_profile_filter_is_paginated_in_sqlite(tmp_path: Path, monkeypatch):
-    import vibesorter.browser.server as server
+    from vibesorter.browser import server
 
     db = tmp_path / "large-analysis.db"
     blue_profile = ImageProfile(colors=(AttributeValue("blue", 0.9),)).to_json()

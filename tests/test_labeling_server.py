@@ -46,7 +46,7 @@ def test_label_decision_endpoint_persists_human_label(tmp_path):
     thread.start()
     try:
         connection = HTTPConnection("127.0.0.1", server.server_port)
-        connection.request("POST", "/api/label/decision", body=json.dumps({"path": str(image), "label": "moody"}), headers={"Content-Type": "application/json"})
+        connection.request("POST", "/api/label/decision", body=json.dumps({"path": str(image), "label": "moody"}), headers={"Content-Type": "application/json", "Origin": f"http://127.0.0.1:{server.server_port}"})
         response = connection.getresponse()
         body = json.loads(response.read())
         assert response.status == 200
@@ -74,7 +74,7 @@ def test_label_decision_rejects_unknown_vibe(tmp_path):
     thread.start()
     try:
         connection = HTTPConnection("127.0.0.1", server.server_port)
-        connection.request("POST", "/api/label/decision", body=json.dumps({"path": str(image), "label": "Nope"}), headers={"Content-Type": "application/json"})
+        connection.request("POST", "/api/label/decision", body=json.dumps({"path": str(image), "label": "Nope"}), headers={"Content-Type": "application/json", "Origin": f"http://127.0.0.1:{server.server_port}"})
         response = connection.getresponse()
         body = json.loads(response.read())
         assert response.status == 400

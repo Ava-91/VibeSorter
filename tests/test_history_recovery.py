@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import vibesorter.history as history
+from vibesorter import history
 from vibesorter.history import load_batch, record_batch, rollback_batch
 from vibesorter.operations import MoveResult
 
