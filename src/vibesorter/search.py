@@ -29,6 +29,11 @@ class ImageQuery:
     saturation: str | None = None
     brightness: str | None = None
     vibes: tuple[str, ...] = field(default_factory=tuple)
+    max_vibe_margin: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.max_vibe_margin is not None and not 0 <= self.max_vibe_margin <= 1:
+            raise ValueError("max_vibe_margin must be between 0 and 1")
 
 
 def _has(values: tuple[str, ...], selected: tuple[str, ...]) -> bool:
@@ -59,6 +64,10 @@ def _matches(result: AnalysisResult, query: ImageQuery, profile: ImageProfile | 
             return False
     elif result.best.score < query.min_score:
         return False
+    if query.max_vibe_margin is not None:
+        margin = result.best.score - (result.scores[1].score if len(result.scores) > 1 else 0.0)
+        if margin > query.max_vibe_margin:
+            return False
     if features.text_likelihood > query.max_text_likelihood:
         return False
     path_text = str(result.path).casefold()
