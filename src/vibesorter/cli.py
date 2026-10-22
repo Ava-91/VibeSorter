@@ -33,8 +33,8 @@ from .review import (
 )
 from .scanner import find_images
 from .search import ImageQuery, search_cache
-from .vibes import VIBES
 from .taxonomy import Brightness, Color, MediaType, Saturation, Temperature
+from .vibes import VIBES
 
 
 def _add_folder_argument(command: argparse.ArgumentParser) -> None:
