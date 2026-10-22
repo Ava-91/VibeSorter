@@ -48,7 +48,10 @@ jobs:
           from pathlib import Path
 
           tag_version = os.environ["RELEASE_TAG"].removeprefix("v")
-          project_version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          project_metadata = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          project_version = project_metadata["version"]
+          if project_metadata["name"].casefold() == "vibesorter":
+              raise SystemExit("Refusing release: PyPI name vibesorter is already used by an unrelated project.")
           runtime_text = Path("src/vibesorter/__init__.py").read_text()
           cargo_text = Path("src-tauri/Cargo.toml").read_text()
           tauri_version = json.loads(Path("src-tauri/tauri.conf.json").read_text())["version"]
