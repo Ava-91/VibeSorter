@@ -1,0 +1,53 @@
+name: Bug report
+description: Report a reproducible VibeSorter issue without sharing private image libraries.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not upload private image libraries. Redact usernames, absolute paths, and other sensitive data from logs.
+  - type: input
+    id: version
+    attributes:
+      label: VibeSorter version
+      placeholder: "0.8.1 or commit SHA"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      placeholder: "Windows 11 x86_64 / Ubuntu 24.04 x86_64 / macOS arm64"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Include the command or UI sequence and whether a small synthetic test library reproduces it.
+      placeholder: "1. Open ...\n2. Select ...\n3. Observe ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant redacted logs
+      description: Remove private filenames, usernames, absolute paths, tokens, and other sensitive information.
+    validations:
+      required: false
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Data safety
+      options:
+        - label: I have a backup before attempting filesystem-changing operations.
+          required: false
+        - label: I have removed private data from logs and attachments.
+          required: true
