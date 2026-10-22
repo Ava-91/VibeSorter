@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tomllib
 
 
 def test_package_has_single_source_tree() -> None:
@@ -25,8 +26,6 @@ def test_project_metadata_uses_src_layout() -> None:
 
 
 def test_distribution_name_does_not_conflict_with_import_package() -> None:
-    import tomllib
-
     root = Path(__file__).resolve().parents[1]
     metadata = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
     assert metadata["project"]["name"] == "vibesorter-image-organizer"
