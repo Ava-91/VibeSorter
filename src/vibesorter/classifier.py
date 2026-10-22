@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from .features import ImageFeatures
 from .profile import AttributeValue, ImageProfile
+
+# The current heuristic makes automatic predictions for only these media types.
+# Illustration and collage remain valid taxonomy values for manually supplied profiles.
+AUTO_PREDICTED_MEDIA_TYPES = frozenset({"photograph", "screenshot", "graphic"})
 from .vibes import score_vibes
 
 
