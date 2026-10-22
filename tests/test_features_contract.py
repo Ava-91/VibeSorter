@@ -30,7 +30,7 @@ def test_exif_orientation_is_applied_before_feature_extraction(tmp_path: Path) -
     original = Image.new("RGB", (32, 16), "black")
     for x in range(32):
         for y in range(16):
-            original.putpixel((x, y), "red" if x < 16 else "blue")
+            original.putpixel((x, y), (255, 0, 0) if x < 16 else (0, 0, 255))
 
     exif = Image.Exif()
     exif[274] = 6
