@@ -43,3 +43,36 @@ def test_search_command_has_no_workers_or_recursive_scan_options() -> None:
     assert "--workers" not in search
     assert "--no-recursive" not in search
     assert "--json" in search
+
+
+
+def test_search_command_parses_profile_and_uncertainty_filters() -> None:
+    args = build_parser().parse_args([
+        "search",
+        "photos",
+        "--media-type",
+        "photograph",
+        "--color",
+        "blue",
+        "--color",
+        "red",
+        "--temperature",
+        "cool",
+        "--saturation-label",
+        "muted",
+        "--brightness-label",
+        "dark",
+        "--profile-vibe",
+        "dreamy",
+        "--include-secondary-vibes",
+        "--uncertain-margin",
+        "0.08",
+    ])
+    assert args.media_type == "photograph"
+    assert args.color == ["blue", "red"]
+    assert args.temperature == "cool"
+    assert args.profile_saturation == "muted"
+    assert args.profile_brightness == "dark"
+    assert args.profile_vibes == ["dreamy"]
+    assert args.include_secondary_vibes is True
+    assert args.uncertain_margin == 0.08
