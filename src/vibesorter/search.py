@@ -31,6 +31,10 @@ class ImageQuery:
     vibes: tuple[str, ...] = field(default_factory=tuple)
     max_vibe_margin: float | None = None
 
+    def __post_init__(self) -> None:
+        if self.max_vibe_margin is not None and not 0 <= self.max_vibe_margin <= 1:
+            raise ValueError("max_vibe_margin must be between 0 and 1")
+
 
 def _has(values: tuple[str, ...], selected: tuple[str, ...]) -> bool:
     return not selected or any(value in selected for value in values)
