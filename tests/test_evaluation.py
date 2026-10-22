@@ -4,7 +4,13 @@ from pathlib import Path
 
 from PIL import Image
 
-from vibesorter.evaluation import CANONICAL_VIBES, LabelledImage, evaluate_dataset, evaluate_labels, load_labels
+from vibesorter.evaluation import (
+    CANONICAL_VIBES,
+    LabelledImage,
+    evaluate_dataset,
+    evaluate_labels,
+    load_labels,
+)
 
 
 def test_load_labels_reads_jsonl(tmp_path: Path) -> None:
