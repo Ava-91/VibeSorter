@@ -202,7 +202,7 @@ jobs:
 
       - name: Upload Windows installers
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vibesorter-windows
           path: |
@@ -212,7 +212,7 @@ jobs:
 
       - name: Upload macOS installer
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vibesorter-macos
           path: src-tauri/target/**/release/bundle/dmg/*.dmg
@@ -220,7 +220,7 @@ jobs:
 
       - name: Upload Linux installers
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vibesorter-linux
           path: |
