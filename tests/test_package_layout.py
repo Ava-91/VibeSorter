@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 
@@ -21,3 +22,11 @@ def test_project_metadata_uses_src_layout() -> None:
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
     assert 'where = ["src"]' in pyproject
     assert 'vibesorter = "vibesorter.entrypoint:main"' in pyproject
+
+
+
+def test_distribution_name_does_not_conflict_with_import_package() -> None:
+    root = Path(__file__).resolve().parents[1]
+    metadata = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    assert metadata["project"]["name"] == "vibesorter-image-organizer"
+    assert (root / "src" / "vibesorter").is_dir()

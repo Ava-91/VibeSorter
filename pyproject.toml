@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vibesorter"
+name = "vibesorter-image-organizer"
 version = "0.8.1"
 description = "Local-first image organizer using a deterministic feature-based heuristic classifier."
 readme = "README.md"
