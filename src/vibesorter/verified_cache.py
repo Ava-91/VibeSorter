@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 from collections.abc import Iterable
+from pathlib import Path
 
 from .cache import AnalysisCache
 
