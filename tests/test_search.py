@@ -174,3 +174,9 @@ def test_search_filters_profile_dimensions_and_uncertain_margin(tmp_path: Path) 
     cache.save()
     assert [item.path for item in search_cache(cache, ImageQuery(media_type="illustration", colors=("red",)))] == [close]
     assert [item.path for item in search_cache(cache, ImageQuery(max_vibe_margin=0.1))] == [close]
+
+
+
+def test_search_rejects_invalid_uncertainty_margin() -> None:
+    with pytest.raises(ValueError, match="max_vibe_margin"):
+        ImageQuery(max_vibe_margin=1.1)
