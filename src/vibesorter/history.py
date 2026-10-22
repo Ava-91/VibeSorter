@@ -114,7 +114,7 @@ def load_batch(history_path: Path, batch_id: str) -> tuple[HistoryRecord, ...]:
         except json.JSONDecodeError as exc:
             raise ValueError(f"corrupt history at line {line_number}: {exc.msg}") from exc
         if not isinstance(item, dict):
-            raise ValueError(f"invalid history record at line {line_number}: expected an object")
+            raise TypeError(f"invalid history record at line {line_number}: expected an object")
         if item.get("event") != "move" or item.get("batch_id") != batch_id:
             continue
         try:
