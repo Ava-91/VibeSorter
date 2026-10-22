@@ -194,7 +194,8 @@ async fn start_backend(app: tauri::AppHandle, folder: String, port: u16) -> Resu
 #[tauri::command]
 async fn index_folder(app: tauri::AppHandle, folder: String) -> Result<(), String> {
     let previous_child = {
-        let mut active = app.state::<AnalysisState>().active.lock().unwrap();
+        let state = app.state::<AnalysisState>();
+        let mut active = state.active.lock().unwrap();
         active.take().and_then(|mut run| run.child.take())
     };
     if let Some(child) = previous_child {
@@ -211,7 +212,8 @@ async fn index_folder(app: tauri::AppHandle, folder: String) -> Result<(), Strin
         .map_err(|error| format!("Could not start analysis: {error}"))?;
 
     let run_id = app.state::<AnalysisState>().next_id.fetch_add(1, Ordering::Relaxed);
-    *app.state::<AnalysisState>().active.lock().unwrap() = Some(AnalysisRun {
+    let state = app.state::<AnalysisState>();
+    *state.active.lock().unwrap() = Some(AnalysisRun {
         id: run_id,
         child: Some(child),
         cancelled: false,
@@ -263,7 +265,8 @@ async fn index_folder(app: tauri::AppHandle, folder: String) -> Result<(), Strin
 #[tauri::command]
 async fn cancel_index(app: tauri::AppHandle) -> Result<(), String> {
     let (run_id, child) = {
-        let mut active = app.state::<AnalysisState>().active.lock().unwrap();
+        let state = app.state::<AnalysisState>();
+        let mut active = state.active.lock().unwrap();
         if let Some(run) = active.as_mut() {
             run.cancelled = true;
             (Some(run.id), run.child.take())
@@ -275,7 +278,8 @@ async fn cancel_index(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(child) = child {
         if let Err(error) = child.kill() {
             if let Some(run_id) = run_id {
-                let mut active = app.state::<AnalysisState>().active.lock().unwrap();
+                let state = app.state::<AnalysisState>();
+        let mut active = state.active.lock().unwrap();
                 if let Some(run) = active.as_mut().filter(|run| run.id == run_id) {
                     run.cancelled = false;
                 }
