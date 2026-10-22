@@ -47,9 +47,9 @@ class SQLiteAnalysisCache:
         self.connection.execute('PRAGMA foreign_keys = ON')
         self.connection.execute('PRAGMA journal_mode = WAL')
         self._create_schema()
-        self._ensure_feature_version()
         if migrate_json:
             self._migrate_legacy_json()
+        self._ensure_feature_version()
 
     def _create_schema(self) -> None:
         self.connection.executescript(
