@@ -113,7 +113,7 @@ def _two_file_batch(tmp_path: Path):
 
 
 def test_failed_later_move_rolls_back_prior_moves_and_removes_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import vibesorter.operations as operations
+    from vibesorter import operations
 
     library, output, first, second, reviewed = _two_file_batch(tmp_path)
     journal = tmp_path / "history.pending.jsonl"
