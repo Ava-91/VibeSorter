@@ -8,6 +8,7 @@ from pathlib import Path
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 ANALYSIS_SIZE = (64, 64)
+FEATURE_VERSION = 2
 PALETTE_SIZE = 6
 MAX_IMAGE_PIXELS = int(Image.MAX_IMAGE_PIXELS or 89_478_485)
 
@@ -98,6 +99,46 @@ def _region_features(image: Image.Image) -> tuple[SpatialRegion, ...]:
     return tuple(regions)
 
 
+
+def _mean_brightness_saturation(image: Image.Image) -> tuple[float, float, int]:
+    """Return mean HSV brightness/saturation and pixel count for a crop."""
+    pixels = list(image.convert("HSV").getdata())
+    if not pixels:
+        return 0.0, 0.0, 0
+    count = len(pixels)
+    brightness = sum(value for _, _, value in pixels) / count / 255.0
+    saturation = sum(sat for _, sat, _ in pixels) / count / 255.0
+    return brightness, saturation, count
+
+
+def _center_deltas(image: Image.Image) -> tuple[float, float]:
+    """Compare the central half of the image with the surrounding outer area."""
+    width, height = image.size
+    left, top = width // 4, height // 4
+    right, bottom = max(left + 1, (3 * width) // 4), max(top + 1, (3 * height) // 4)
+    right, bottom = min(right, width), min(bottom, height)
+    center = image.crop((left, top, right, bottom))
+    center_brightness, center_saturation, _ = _mean_brightness_saturation(center)
+
+    # These four strips partition the pixels outside the center without overlap.
+    outer_crops = (
+        image.crop((0, 0, width, top)),
+        image.crop((0, bottom, width, height)),
+        image.crop((0, top, left, bottom)),
+        image.crop((right, top, width, bottom)),
+    )
+    outer = [_mean_brightness_saturation(crop) for crop in outer_crops]
+    outer_count = sum(item[2] for item in outer)
+    if not outer_count:
+        return 0.0, 0.0
+    outer_brightness = sum(item[0] * item[2] for item in outer) / outer_count
+    outer_saturation = sum(item[1] * item[2] for item in outer) / outer_count
+    return (
+        round(center_brightness - outer_brightness, 4),
+        round(center_saturation - outer_saturation, 4),
+    )
+
+
 def extract_features(path: str | Path) -> ImageFeatures:
     """Extract lightweight global and spatial visual signals."""
     image_path = Path(path).expanduser()
@@ -166,10 +207,7 @@ def extract_features(path: str | Path) -> ImageFeatures:
     top = sorted(counts.items(), key=lambda item: item[1], reverse=True)[:PALETTE_SIZE]
     colors = tuple(ColorSample(rgb=color, proportion=amount / count) for color, amount in top)
     regions = _region_features(image)
-    center = regions[3] if regions else SpatialRegion(0.0, 0.0, 0.0, 0.0)
-    edge_regions = regions[:3]
-    edge_brightness = sum(item.brightness for item in edge_regions) / len(edge_regions) if edge_regions else center.brightness
-    edge_saturation = sum(item.saturation for item in edge_regions) / len(edge_regions) if edge_regions else center.saturation
+    center_brightness_delta, center_saturation_delta = _center_deltas(image)
 
     return ImageFeatures(
         path=image_path,
@@ -186,6 +224,6 @@ def extract_features(path: str | Path) -> ImageFeatures:
         text_likelihood=_text_likelihood(image, grayscale_ratio, contrast),
         colors=colors,
         regions=regions,
-        center_brightness_delta=round(center.brightness - edge_brightness, 4),
-        center_saturation_delta=round(center.saturation - edge_saturation, 4),
+        center_brightness_delta=center_brightness_delta,
+        center_saturation_delta=center_saturation_delta,
     )

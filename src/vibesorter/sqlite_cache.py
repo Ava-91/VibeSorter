@@ -5,7 +5,7 @@ import sqlite3
 from dataclasses import asdict
 from pathlib import Path
 
-from .features import ColorSample, ImageFeatures, SpatialRegion
+from .features import FEATURE_VERSION, ColorSample, ImageFeatures, SpatialRegion
 from .profile import ImageProfile
 from .vibes import VibeScore
 
@@ -49,6 +49,7 @@ class SQLiteAnalysisCache:
         self._create_schema()
         if migrate_json:
             self._migrate_legacy_json()
+        self._ensure_feature_version()
 
     def _create_schema(self) -> None:
         self.connection.executescript(
@@ -60,6 +61,21 @@ class SQLiteAnalysisCache:
         )
         self.connection.execute("INSERT OR REPLACE INTO metadata(key,value) VALUES('schema_version',?)", (str(SCHEMA_VERSION),))
         self.connection.commit()
+
+
+    def _ensure_feature_version(self) -> None:
+        row = self.connection.execute(
+            "SELECT value FROM metadata WHERE key='feature_version'"
+        ).fetchone()
+        if row is None or row[0] != str(FEATURE_VERSION):
+            # Cached features include derived spatial measurements; invalidate them
+            # when extraction semantics change, while leaving the DB schema intact.
+            self.connection.execute("DELETE FROM images")
+            self.connection.execute(
+                "INSERT OR REPLACE INTO metadata(key,value) VALUES('feature_version',?)",
+                (str(FEATURE_VERSION),),
+            )
+            self.connection.commit()
 
     def _migrate_legacy_json(self) -> None:
         legacy_path = self.path.with_suffix('.json')

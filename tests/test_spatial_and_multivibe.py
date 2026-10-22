@@ -4,16 +4,51 @@ from vibesorter.features import extract_features
 from vibesorter.vibes import VibeScore, select_vibes
 
 
-def test_spatial_features_are_exposed(tmp_path):
-    path = tmp_path / "split.png"
+def _features_for_image(tmp_path, name, painter):
+    path = tmp_path / name
     image = Image.new("RGB", (64, 64), "black")
-    for x in range(32, 64):
-        for y in range(32, 64):
-            image.putpixel((x, y), (255, 240, 220))
+    painter(image)
     image.save(path)
-    features = extract_features(path)
+    return extract_features(path)
+
+
+def test_spatial_features_detect_a_bright_center(tmp_path):
+    features = _features_for_image(
+        tmp_path,
+        "center.png",
+        lambda image: [
+            image.putpixel((x, y), (255, 240, 220))
+            for x in range(16, 48)
+            for y in range(16, 48)
+        ],
+    )
     assert len(features.regions) == 4
-    assert features.center_brightness_delta > 0
+    assert features.center_brightness_delta > 0.5
+    assert features.center_saturation_delta > 0
+
+
+def test_spatial_features_do_not_mistake_bright_corner_for_center(tmp_path):
+    features = _features_for_image(
+        tmp_path,
+        "corner.png",
+        lambda image: [
+            image.putpixel((x, y), (255, 240, 220))
+            for x in range(48, 64)
+            for y in range(48, 64)
+        ],
+    )
+    assert features.center_brightness_delta < 0
+
+
+def test_spatial_features_detect_bright_edges_outside_center(tmp_path):
+    def paint_edges(image):
+        for x in range(64):
+            for y in range(64):
+                if x < 8 or x >= 56 or y < 8 or y >= 56:
+                    image.putpixel((x, y), (255, 240, 220))
+
+    features = _features_for_image(tmp_path, "edges.png", paint_edges)
+    assert features.center_brightness_delta < 0
 
 
 def test_multi_vibe_selection_keeps_close_scores():
