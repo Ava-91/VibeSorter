@@ -57,3 +57,13 @@ def test_media_type_taxonomy_distinguishes_auto_predictions_from_manual_values()
     assert AUTO_PREDICTED_MEDIA_TYPES <= taxonomy_values
     assert taxonomy_values - AUTO_PREDICTED_MEDIA_TYPES == {"illustration", "collage"}
     assert classify_profile(features(text_likelihood=0.05)).media_type.value == "photograph"
+
+
+
+def test_classifier_only_emits_declared_automatic_media_types():
+    for sample in (
+        features(text_likelihood=0.05, grayscale_ratio=0.05),
+        features(text_likelihood=0.75, grayscale_ratio=0.10),
+        features(text_likelihood=0.90, grayscale_ratio=0.80),
+    ):
+        assert classify_profile(sample).media_type.value in AUTO_PREDICTED_MEDIA_TYPES
