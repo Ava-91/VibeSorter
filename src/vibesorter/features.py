@@ -107,7 +107,7 @@ def _mean_brightness_saturation(image: Image.Image) -> tuple[float, float, int]:
         return 0.0, 0.0, 0
     count = len(pixels)
     brightness = sum(value for _, _, value in pixels) / count / 255.0
-    saturation = sum(value for _, sat, _ in pixels) / count / 255.0
+    saturation = sum(sat for _, sat, _ in pixels) / count / 255.0
     return brightness, saturation, count
 
 
