@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from vibesorter.cache import AnalysisCache
 from vibesorter.features import ColorSample, ImageFeatures
 from vibesorter.pipeline import AnalysisResult
