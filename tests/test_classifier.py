@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from vibesorter.classifier import AUTO_PREDICTED_MEDIA_TYPES, classify_profile
-from vibesorter.taxonomy import MediaType
 from vibesorter.features import ColorSample, ImageFeatures
+from vibesorter.taxonomy import MediaType
 
 
 def features(**overrides) -> ImageFeatures:
