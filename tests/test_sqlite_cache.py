@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 from PIL import Image
 
@@ -28,3 +30,31 @@ def test_sqlite_cache_invalidates_changed_image(tmp_path):
     features = extract_features(image); cache.set(image, features, score_vibes(features)); cache.save()
     Image.new('RGB', (16, 16), 'white').save(image)
     assert cache.get(image) is None
+
+
+
+def test_concurrent_sqlite_cache_writers_preserve_all_entries(tmp_path):
+    database = tmp_path / ".vibesorter" / "analysis.db"
+    images = []
+    for index in range(4):
+        image = tmp_path / f"sample-{index}.png"
+        Image.new("RGB", (16, 16), (index * 40, 30, 80)).save(image)
+        images.append(image)
+
+    # Create the schema before concurrent writers begin.
+    AnalysisCache(database).close()
+    barrier = Barrier(len(images))
+
+    def write_one(image: Path) -> None:
+        with AnalysisCache(database) as cache:
+            features = extract_features(image)
+            scores = score_vibes(features)
+            barrier.wait(timeout=10)
+            cache.set(image, features, scores)
+            cache.save()
+
+    with ThreadPoolExecutor(max_workers=len(images)) as pool:
+        list(pool.map(write_one, images))
+
+    with AnalysisCache(database) as cache:
+        assert {path for path, _, _ in cache.entries()} == set(images)
