@@ -144,6 +144,14 @@ def rollback_batch(history_path: Path, batch_id: str, *, confirm: bool = False, 
         destination = Path(record.destination).expanduser()
         source = Path(record.source).expanduser()
         if not destination.is_file():
+            # A repeated rollback: the file is already back where it started.
+            try:
+                already_home = source.is_file() and not source.is_symlink() and _sha256(source) == record.sha256
+            except OSError:
+                already_home = False
+            if already_home:
+                results.append({"operation_id": record.operation_id, "status": "already_restored", "source": str(source), "destination": str(destination), "detail": "file is already back at its original path (contents match the recorded hash)"})
+                continue
             results.append({"operation_id": record.operation_id, "status": "missing", "source": str(source), "destination": str(destination), "detail": "moved file is no longer at its recorded destination"})
             continue
         try:

@@ -1,6 +1,6 @@
 [package]
 name = "vibesorter-desktop"
-version = "0.8.1"
+version = "1.0.0"
 description = "Tauri desktop application for VibeSorter"
 authors = ["Ava"]
 edition = "2021"

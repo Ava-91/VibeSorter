@@ -321,9 +321,23 @@ def _run_rollback(args, parser) -> int:
     if not args.confirm and not args.dry_run: parser.error("rollback requires --confirm or --dry-run")
     try: results = rollback_batch(args.history, args.batch_id, confirm=args.confirm and not args.dry_run, dry_run=args.dry_run)
     except (OSError, ValueError) as exc: parser.error(str(exc))
-    if args.json: print(json.dumps(results, indent=2, ensure_ascii=False, default=str))
-    else: print(f"Rolled back {len(results)} operation(s).")
-    return 0
+    dry = args.dry_run
+    ok_statuses = {"planned", "already_restored"} if dry else {"restored", "already_restored"}
+    problems = [item for item in results if item["status"] not in ok_statuses]
+    if args.json:
+        print(json.dumps(results, indent=2, ensure_ascii=False, default=str))
+    else:
+        restored = sum(item["status"] == ("planned" if dry else "restored") for item in results)
+        already = sum(item["status"] == "already_restored" for item in results)
+        verb = "Can restore" if dry else "Restored"
+        line = f"{verb} {restored} of {len(results)} operation(s)."
+        if already:
+            line += f" {already} already back at their original path."
+        print(line)
+        for item in problems:
+            print(f"  #{item['operation_id']} {item['status']}: {item['detail']} ({item['destination']})")
+    # Failures must be visible to scripts, never reported as a clean success.
+    return 1 if problems else 0
 
 
 def _run_history(args) -> int:
