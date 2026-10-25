@@ -7,11 +7,17 @@ All notable development changes to VibeSorter are documented here.
 > Status: version declarations are 1.0.0 so the tag-driven release workflow can validate. Public release still requires maintainer approval; see "Known limitations" below.
 
 ### Fixed — rollback reporting
-- `rollback` now reports `Restored X of Y operation(s).` with each failed operation's reason (`missing`, `conflict`, `error`) and exits non-zero when anything was not restored. Previously it printed "Rolled back N operation(s)." and exited 0 even when nothing could be restored (for example, repeating a rollback).
+- `rollback` now prints `Restored X of Y operation(s).` with each problem operation's status and reason (`missing`, `conflict`, `error`) and exits non-zero when anything could not be restored. Previously it printed "Rolled back N operation(s)." and exited 0 even when nothing was restored.
+- Repeating a rollback for a batch that is already fully restored now succeeds and reports `already_restored` (the file at the original path matches the recorded SHA-256) instead of reporting every file as missing.
+- Regression tests cover complete, partial (deleted / modified / occupied-path), permission-error, dry-run, repeated and unknown-batch rollbacks.
+
+### Changed — release pipeline
+- Tag validation moved into `scripts/release_version.py` with tests. It accepts `vX.Y.Z` and `vX.Y.Z-rc.N`, maps release candidates to PEP 440 (`1.0.0rcN`) and Cargo/Tauri (`1.0.0-N`) spellings, and rejects every other tag shape. Release candidates publish only a draft, pre-release GitHub release. See `docs/versioning.md`.
 
 ### Known limitations
 - Windows and macOS desktop artifacts are unsigned and macOS is not notarized; see `docs/platform-support-and-signing.md`.
 - No human-labeled classifier benchmark exists yet (#231), taxonomy coverage is not yet validated (#232), and packaged-desktop GUI automation is not yet implemented (#158, #234). Confidence scores are heuristic ranking signals, not calibrated probabilities.
+- The Tauri MSI/NSIS bundlers have not yet been shown to accept the numeric release-candidate version (`1.0.0-1`); no release-candidate tag has been built.
 - Whether the `vibesorter-image-organizer` PyPI name is available has not been verified from the development environment (PyPI was unreachable).
 
 ### Fixed — apply/rollback safety

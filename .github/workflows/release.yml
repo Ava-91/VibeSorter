@@ -35,39 +35,14 @@ jobs:
         run: |
           ruff check .
           python -m pytest
-      - name: Verify tag is a versioned commit on main
+      - name: Verify tag matches every version declaration and is on main
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          python - <<'PY'
-          import json
-          import os
-          import re
-          import tomllib
-          from pathlib import Path
-
-          tag_version = os.environ["RELEASE_TAG"].removeprefix("v")
-          project_metadata = tomllib.loads(Path("pyproject.toml").read_text())["project"]
-          project_version = project_metadata["version"]
-          if project_metadata["name"].casefold() == "vibesorter":
-              raise SystemExit("Refusing release: PyPI name vibesorter is already used by an unrelated project.")
-          runtime_text = Path("src/vibesorter/__init__.py").read_text()
-          cargo_text = Path("src-tauri/Cargo.toml").read_text()
-          tauri_version = json.loads(Path("src-tauri/tauri.conf.json").read_text())["version"]
-          runtime_version = re.search(r'^__version__ = "([^"]+)"$', runtime_text, re.MULTILINE)
-          cargo_version = re.search(r'^version = "([^"]+)"$', cargo_text, re.MULTILINE)
-          assert runtime_version and cargo_version, "Could not find runtime or Cargo version"
-          versions = {
-              "tag": tag_version,
-              "pyproject": project_version,
-              "runtime": runtime_version.group(1),
-              "Cargo": cargo_version.group(1),
-              "Tauri": tauri_version,
-          }
-          if len(set(versions.values())) != 1:
-              raise SystemExit(f"Release tag/version mismatch: {versions}")
-          PY
+          # Accepts only vX.Y.Z and vX.Y.Z-rc.N; see scripts/release_version.py for the
+          # PEP 440 / Cargo / Tauri spellings of release candidates.
+          python scripts/release_version.py --tag "$RELEASE_TAG"
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - name: Build Python wheel and source archive
         run: python -m build --outdir python-dist
@@ -221,6 +196,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: VibeSorter ${{ github.ref_name }}
           draft: true
+          prerelease: ${{ contains(github.ref_name, '-rc.') }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
