@@ -51,6 +51,7 @@ def test_reviewed_proposal_round_trips_with_metadata(tmp_path):
 
     assert data["version"] == proposal.version
     assert data["output_root"] == proposal.output_root
+    assert data["source_root"] == proposal.source_root
     assert data["review"] == [{"id": 1, "status": "accepted"}]
     assert restored[0].operation == proposal.operations[0]
     assert restored[0].status == "accepted"

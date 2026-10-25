@@ -4,6 +4,12 @@ All notable development changes to VibeSorter are documented here.
 
 ## Unreleased
 
+### Fixed — apply/rollback safety
+- `review` now preserves `source_root` in the reviewed proposal. Previously `apply` refused every move of a reviewed proposal ("missing its source_root or output_root safety boundary"), so the documented `propose -> review -> apply` workflow could not move anything.
+- Proposals now store absolute source paths. Previously history recorded relative paths, so `rollback` run from a different directory restored files into the wrong place and still reported success.
+- `apply` now exits non-zero when a batch is refused (`unsafe_path` / `blocked`) and prints a Batch ID only when something was actually moved.
+- Added end-to-end regression tests (`tests/test_apply_rollback_workflow.py`) using generated images, a library path with spaces and non-ASCII characters, dry-run, apply, and rollback from another working directory.
+
 ### Added — reliability
 - Reusable temporary-image fixtures for tests.
 - Classifier invariant coverage for score ordering and normalized confidence.
