@@ -73,6 +73,9 @@ def reviewed_to_dict(
     return {
         "version": proposal.version,
         "output_root": proposal.output_root,
+        # apply refuses to run without both safety boundaries, so a reviewed
+        # proposal must carry source_root exactly like the original proposal.
+        "source_root": proposal.source_root,
         "operations": [asdict(operation) for operation in proposal.operations],
         "review": [
             {"id": item.operation.id, "status": item.status} for item in reviewed

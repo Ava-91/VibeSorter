@@ -65,7 +65,9 @@ def build_proposal(
         operations.append(
             MoveOperation(
                 index,
-                str(result.path),
+                # Absolute (not symlink-resolved) so apply, history and rollback
+                # never depend on the working directory they are later run from.
+                os.path.abspath(Path(result.path).expanduser()),
                 str(destination),
                 result.best.name,
                 round(result.best.score, 6),

@@ -295,9 +295,11 @@ def _run_apply(args, parser) -> int:
     elif journal_path is not None:
         journal_path.unlink(missing_ok=True)
 
+    # A batch ID is only meaningful when something was actually recorded.
+    reported_batch_id = batch_id if moved else None
     if args.json:
         payload = {
-            "batch_id": batch_id,
+            "batch_id": reported_batch_id,
             "moved": len(moved),
             "results": results,
         }
@@ -306,11 +308,13 @@ def _run_apply(args, parser) -> int:
         counts = {status: sum(result.status == status for result in results) for status in {result.status for result in results}}
         summary = ", ".join(f"{status}={count}" for status, count in sorted(counts.items())) or "no operations"
         print(f"Apply result: {summary}.")
-        if batch_id is not None:
-            print(f"Batch ID: {batch_id}")
+        if reported_batch_id is not None:
+            print(f"Batch ID: {reported_batch_id}")
         elif args.confirm and not args.dry_run:
             print("No filesystem changes were made.")
-    return 0
+    # A refused batch (unsafe or blocked paths) must not look like success to scripts.
+    refused = any(result.status in {"unsafe_path", "blocked"} for result in results)
+    return 1 if refused else 0
 
 
 def _run_rollback(args, parser) -> int:
