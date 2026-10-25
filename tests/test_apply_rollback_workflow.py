@@ -107,7 +107,7 @@ def _apply_batch(monkeypatch, capsys, tmp_path):
     library = _library(tmp_path)
     original = _snapshot(library)
     monkeypatch.chdir(tmp_path)
-    reviewed, data = _write_reviewed(monkeypatch, work, Path("ph otos"))
+    reviewed, _data = _write_reviewed(monkeypatch, work, Path("ph otos"))
     history = work / "history.jsonl"
     capsys.readouterr()
     assert _run(monkeypatch, "apply", str(reviewed), "--confirm", "--history", str(history)) == 0
@@ -135,7 +135,7 @@ def test_repeated_rollback_is_idempotent_and_says_so(tmp_path, monkeypatch, caps
 
 
 def test_partial_rollback_restores_what_is_safe_and_reports_the_rest(tmp_path, monkeypatch, capsys):
-    library, original, history, batch_id, records = _apply_batch(monkeypatch, capsys, tmp_path)
+    _library, _original, history, batch_id, records = _apply_batch(monkeypatch, capsys, tmp_path)
     missing, modified, occupied = records[0], records[1], records[2] if len(records) > 2 else None
     Path(missing["destination"]).unlink()  # user deleted a moved file
     Path(modified["destination"]).write_bytes(b"edited after the move")  # content changed
@@ -159,7 +159,7 @@ def test_partial_rollback_restores_what_is_safe_and_reports_the_rest(tmp_path, m
 def test_rollback_filesystem_error_is_reported_without_losing_the_file(tmp_path, monkeypatch, capsys):
     from vibesorter import history as history_module
 
-    library, original, history, batch_id, records = _apply_batch(monkeypatch, capsys, tmp_path)
+    _library, _original, history, batch_id, records = _apply_batch(monkeypatch, capsys, tmp_path)
 
     def denied(src, dst, *args, **kwargs):
         raise PermissionError("simulated permission denied")
@@ -175,7 +175,7 @@ def test_rollback_filesystem_error_is_reported_without_losing_the_file(tmp_path,
 
 
 def test_rollback_dry_run_never_changes_files(tmp_path, monkeypatch, capsys):
-    library, original, history, batch_id, records = _apply_batch(monkeypatch, capsys, tmp_path)
+    _library, _original, history, batch_id, records = _apply_batch(monkeypatch, capsys, tmp_path)
     moved_state = {record["destination"]: Path(record["destination"]).read_bytes() for record in records}
 
     assert _run(monkeypatch, "rollback", batch_id, "--dry-run", "--history", str(history)) == 0
@@ -185,7 +185,7 @@ def test_rollback_dry_run_never_changes_files(tmp_path, monkeypatch, capsys):
 
 
 def test_rollback_of_unknown_batch_fails_cleanly(tmp_path, monkeypatch, capsys):
-    library, original, history, batch_id, records = _apply_batch(monkeypatch, capsys, tmp_path)
+    _library, _original, history, _batch_id, _records = _apply_batch(monkeypatch, capsys, tmp_path)
     try:
         _run(monkeypatch, "rollback", "no-such-batch", "--confirm", "--history", str(history))
     except SystemExit as exc:
