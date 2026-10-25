@@ -98,3 +98,29 @@ def test_refused_apply_exits_nonzero_and_reports_no_batch(tmp_path, monkeypatch,
     assert "Batch ID" not in output
     assert "No filesystem changes were made." in output
     assert _snapshot(library) == original
+
+
+def test_repeated_rollback_reports_failure_instead_of_success(tmp_path, monkeypatch, capsys):
+    work = tmp_path / "work"
+    work.mkdir()
+    library = _library(tmp_path)
+    original = _snapshot(library)
+    monkeypatch.chdir(tmp_path)
+    reviewed, _ = _write_reviewed(monkeypatch, work, Path("ph otos"))
+    history = work / "history.jsonl"
+    capsys.readouterr()
+    assert _run(monkeypatch, "apply", str(reviewed), "--confirm", "--history", str(history)) == 0
+    batch_id = next(
+        line.split()[-1] for line in capsys.readouterr().out.splitlines() if line.startswith("Batch ID:")
+    )
+
+    assert _run(monkeypatch, "rollback", batch_id, "--confirm", "--history", str(history)) == 0
+    assert "Restored" in capsys.readouterr().out
+    assert _snapshot(library) == original
+
+    # Nothing is left to restore: the CLI must say so and exit non-zero.
+    assert _run(monkeypatch, "rollback", batch_id, "--confirm", "--history", str(history)) == 1
+    output = capsys.readouterr().out
+    assert "Restored 0 of" in output
+    assert "missing" in output
+    assert _snapshot(library) == original

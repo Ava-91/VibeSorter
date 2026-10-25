@@ -2,7 +2,17 @@
 
 All notable development changes to VibeSorter are documented here.
 
-## Unreleased
+## 1.0.0 (release candidate; not yet tagged or published)
+
+> Status: version declarations are 1.0.0 so the tag-driven release workflow can validate. Public release still requires maintainer approval; see "Known limitations" below.
+
+### Fixed — rollback reporting
+- `rollback` now reports `Restored X of Y operation(s).` with each failed operation's reason (`missing`, `conflict`, `error`) and exits non-zero when anything was not restored. Previously it printed "Rolled back N operation(s)." and exited 0 even when nothing could be restored (for example, repeating a rollback).
+
+### Known limitations
+- Windows and macOS desktop artifacts are unsigned and macOS is not notarized; see `docs/platform-support-and-signing.md`.
+- No human-labeled classifier benchmark exists yet (#231), taxonomy coverage is not yet validated (#232), and packaged-desktop GUI automation is not yet implemented (#158, #234). Confidence scores are heuristic ranking signals, not calibrated probabilities.
+- Whether the `vibesorter-image-organizer` PyPI name is available has not been verified from the development environment (PyPI was unreachable).
 
 ### Fixed — apply/rollback safety
 - `review` now preserves `source_root` in the reviewed proposal. Previously `apply` refused every move of a reviewed proposal ("missing its source_root or output_root safety boundary"), so the documented `propose -> review -> apply` workflow could not move anything.
