@@ -160,7 +160,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Download all release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-assets
       - name: Validate assets and create SHA-256 checksums
