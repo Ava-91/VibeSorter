@@ -54,6 +54,21 @@ jobs:
           path: python-dist/*
           if-no-files-found: error
 
+  # Run platform-independent desktop tests once; native packaging remains a full OS matrix.
+  desktop-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          cache-on-failure: true
+      - name: Install Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
   build-desktop:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: validate
@@ -155,7 +170,7 @@ jobs:
 
   publish-draft-release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [validate, build-desktop]
+    needs: [validate, desktop-tests, build-desktop]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
