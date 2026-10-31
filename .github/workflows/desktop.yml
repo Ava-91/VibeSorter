@@ -24,6 +24,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Platform-independent tests run once while the three native builds run in parallel.
+  desktop-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Test desktop event and progress regressions
+        run: node --test tests/desktop_progress.test.cjs
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          cache-on-failure: true
+      - name: Install Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
   build:
     strategy:
       fail-fast: false
@@ -40,12 +61,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node.js for desktop frontend regression tests
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Test desktop progress event parser
-        run: node --test tests/desktop_progress.test.cjs
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
