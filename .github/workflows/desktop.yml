@@ -86,8 +86,19 @@ jobs:
         run: python scripts/build_sidecar.py
       - name: Run Tauri lifecycle unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Cache Tauri CLI
+        id: tauri-cli-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-tauri
+            ~/.cargo/bin/cargo-tauri.exe
+          key: tauri-cli-2.12.4-${{ runner.os }}-${{ runner.arch }}
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        if: steps.tauri-cli-cache.outputs.cache-hit != 'true'
+        run: cargo install tauri-cli --version 2.12.4 --locked
+      - name: Verify Tauri CLI
+        run: cargo tauri --version
       - name: Generate Tauri app icons
         run: cargo tauri icon src-tauri/app-icon.svg
       - name: Smoke-test packaged sidecar CLI
