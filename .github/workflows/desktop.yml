@@ -44,6 +44,8 @@ jobs:
           cache-on-failure: true
       - name: Install Linux dependencies
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Run Tauri lifecycle unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
   build:
     strategy:
@@ -84,8 +86,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Build VibeSorter sidecar
         run: python scripts/build_sidecar.py
-      - name: Run Tauri lifecycle unit tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Cache Tauri CLI
         id: tauri-cli-cache
         uses: actions/cache@v4
