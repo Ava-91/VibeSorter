@@ -125,3 +125,26 @@ def test_index_folder_removes_stale_cache_when_changed_image_becomes_corrupt(tmp
     with sqlite3.connect(db) as conn:
         assert conn.execute("SELECT COUNT(*) FROM images WHERE path=?", (str(image),)).fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM content_identity WHERE path=?", (str(image),)).fetchone()[0] == 0
+
+
+def test_index_folder_does_not_cache_features_if_image_changes_during_analysis(tmp_path, monkeypatch):
+    image = tmp_path / "racing.png"
+    Image.new("RGB", (4, 4), (10, 20, 30)).save(image)
+
+    class Result:
+        def __init__(self, path):
+            self.features = _features(path)
+            self.scores = (VibeScore("Retro Blue", 0.7),)
+
+    def mutate_during_analysis(path):
+        result = Result(path)
+        path.write_bytes(path.read_bytes() + b"changed-after-decode")
+        return result
+
+    monkeypatch.setattr(indexer, "analyze_image", mutate_during_analysis)
+    outcome = indexer.index_folder(tmp_path, workers=1)
+    assert outcome["analyzed"] == 0
+    assert outcome["skipped"] == 1
+    with sqlite3.connect(tmp_path / ".vibesorter" / "analysis.db") as conn:
+        assert conn.execute("SELECT COUNT(*) FROM images WHERE path=?", (str(image),)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM content_identity WHERE path=?", (str(image),)).fetchone()[0] == 0

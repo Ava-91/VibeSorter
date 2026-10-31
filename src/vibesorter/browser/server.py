@@ -356,7 +356,7 @@ def _image_path(db_path: Path, requested: str) -> Path | None:
     return path if path.is_file() else None
 
 
-def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=None, *, allow_network: bool = False):
+def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=None, *, allow_network: bool = False, allow_embedding: bool = False):
     db = Path(db_path)
 
     class Handler(BaseHTTPRequestHandler):
@@ -401,14 +401,17 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
 
         def _security_headers(self) -> None:
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("X-Frame-Options", "DENY")
+            if not allow_embedding:
+                self.send_header("X-Frame-Options", "DENY")
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+            self.send_header("Cross-Origin-Resource-Policy", "cross-origin" if allow_embedding else "same-origin")
             self.send_header(
                 "Content-Security-Policy",
                 "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+                "img-src 'self' data:; connect-src 'self'; "
+                + ("frame-ancestors tauri://localhost http://tauri.localhost; " if allow_embedding else "frame-ancestors 'none'; ")
+                + "base-uri 'self'; form-action 'self'",
             )
 
         def _send(self, status: int, content: str, content_type: str = "text/html; charset=utf-8") -> None:
@@ -560,9 +563,9 @@ def _validate_bind_host(host: str, allow_network: bool) -> None:
         print("WARNING: VibeSorter is exposing cached image data to the network. Use only on a trusted network.", file=sys.stderr)
 
 
-def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127.0.0.1", port: int = 8765, label_session=None, *, allow_network: bool = False) -> None:
+def run_server(db_path: str | Path = ".vibesorter/analysis.db", host: str = "127.0.0.1", port: int = 8765, label_session=None, *, allow_network: bool = False, allow_embedding: bool = False) -> None:
     _validate_bind_host(host, allow_network)
-    server = ThreadingHTTPServer((host, port), create_app(db_path, label_session=label_session, allow_network=allow_network))
+    server = ThreadingHTTPServer((host, port), create_app(db_path, label_session=label_session, allow_network=allow_network, allow_embedding=allow_embedding))
     server.daemon_threads = True
     print(f"VibeSorter browser: http://{host}:{port}")
     try:

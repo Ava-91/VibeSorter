@@ -54,6 +54,36 @@ jobs:
           path: python-dist/*
           if-no-files-found: error
 
+  # Run platform-independent desktop tests once; native packaging remains a full OS matrix.
+  desktop-tests:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test desktop event and progress regressions
+        run: node --test tests/desktop_progress.test.cjs
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          cache-on-failure: true
+      - name: Install Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Stub sidecar for tauri-build externalBin check
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries
+          triple=$(rustc --print host-tuple)
+          touch "src-tauri/binaries/vibesorter-sidecar-${triple}"
+      - name: Run Tauri lifecycle unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
   build-desktop:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: validate
@@ -72,12 +102,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Test desktop progress event parser
-        run: node --test tests/desktop_progress.test.cjs
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -98,12 +122,23 @@ jobs:
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
-      - name: Generate Tauri app icons
-        run: cargo tauri icon src-tauri/app-icon.svg
       - name: Build VibeSorter sidecar
         run: python scripts/build_sidecar.py
+      - name: Cache Tauri CLI
+        id: tauri-cli-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-tauri
+            ~/.cargo/bin/cargo-tauri.exe
+          key: tauri-cli-2.12.4-${{ runner.os }}-${{ runner.arch }}
+      - name: Install Tauri CLI
+        if: steps.tauri-cli-cache.outputs.cache-hit != 'true'
+        run: cargo install tauri-cli --version 2.12.4 --locked
+      - name: Verify Tauri CLI
+        run: cargo tauri --version
+      - name: Generate Tauri app icons
+        run: cargo tauri icon src-tauri/app-icon.svg
       - name: Smoke-test packaged sidecar CLI
         shell: python
         run: |
@@ -153,7 +188,7 @@ jobs:
 
   publish-draft-release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [validate, build-desktop]
+    needs: [validate, desktop-tests, build-desktop]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

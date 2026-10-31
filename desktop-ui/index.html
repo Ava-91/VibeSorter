@@ -37,7 +37,7 @@
   <p>Analyze and browse your image library without sending source images to a cloud service.</p>
 
   <div class="actions">
-    <button id="choose" class="primary">Choose image folder</button>
+    <button id="choose" class="primary" disabled>Choose image folder</button>
     <button id="analyze" disabled>Analyze folder</button>
     <button id="cancel" class="danger hidden">Cancel analysis</button>
     <button id="browse" class="hidden">Browse results</button>
@@ -116,8 +116,8 @@ function setRunning(running){
   choose.disabled = running;
   analyze.disabled = running || !folder;
   cancel.classList.toggle("hidden", !running);
-  // A previous cancellation must not leave the next run's button disabled.
   cancel.disabled = false;
+  if (!running) browse.classList.toggle("hidden", !browserUrl);
 }
 
 browse.addEventListener("click", () => {
@@ -127,37 +127,35 @@ browse.addEventListener("click", () => {
 });
 hideResults.addEventListener("click", () => setResultsVisible(false));
 
-listen("analysis-output", (event) => {
-  progressParser.push(String(event.payload ?? ""));
-});
+const listenersReady = Promise.all([
+  listen("analysis-output", (event) => progressParser.push(String(event.payload ?? ""))),
+  listen("analysis-diagnostic", (event) => console.warn("VibeSorter analysis diagnostic:", event.payload)),
+  listen("analysis-error", (event) => {
+    setStatus("Analysis error:\n" + event.payload);
+    setRunning(false);
+    choose.disabled = false;
+  }),
+  listen("analysis-failed", (event) => {
+    setStatus("Analysis failed" + (event.payload ? " (exit code " + event.payload + ")." : "."));
+    setRunning(false);
+    choose.disabled = false;
+  }),
+  listen("analysis-cancelled", () => {
+    setStatus("Analysis cancelled. No cloud upload occurred.");
+    setRunning(false);
+  }),
+  listen("analysis-finished", () => {
+    progressParser.flush();
+    setRunning(false);
+    setStatus("Analysis complete. Your local results are ready to browse.");
+  }),
+]);
 
-listen("analysis-diagnostic", (event) => {
-  // stderr can contain harmless warnings; only the child exit code decides success.
-  console.warn("VibeSorter analysis diagnostic:", event.payload);
-});
-
-listen("analysis-error", (event) => {
-  setStatus("Analysis error:\n" + event.payload);
-  setRunning(false);
+listenersReady.then((unlisten) => {
+  window.addEventListener("beforeunload", () => unlisten.forEach((stop) => stop()));
   choose.disabled = false;
-});
-
-listen("analysis-failed", (event) => {
-  setStatus("Analysis failed" + (event.payload ? " (exit code " + event.payload + ")." : "."));
-  setRunning(false);
-  choose.disabled = false;
-});
-
-listen("analysis-cancelled", () => {
-  setStatus("Analysis cancelled. No cloud upload occurred.");
-  setRunning(false);
-});
-
-listen("analysis-finished", () => {
-  progressParser.flush();
-  setRunning(false);
-  browse.classList.toggle("hidden", !browserUrl);
-  setStatus("Analysis complete. Your local results are ready to browse.");
+}).catch((error) => {
+  setStatus("Could not subscribe to desktop analysis events: " + error);
 });
 
 choose.addEventListener("click", async () => {

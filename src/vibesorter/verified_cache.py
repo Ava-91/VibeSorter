@@ -69,19 +69,28 @@ class VerifiedAnalysisCache(AnalysisCache):
             return None
         return super().get(image_path)
 
-    def set(self, path, features, scores):
-        super().set(path, features, scores)
+    def set(self, path, features, scores, *, expected_identity=None, expected_digest=None) -> bool:
+        """Store results only when the file still matches its pre-analysis identity."""
         image_path = Path(path).expanduser()
         try:
+            super().set(image_path, features, scores)
+            stat = image_path.stat()
             digest = _digest(image_path)
         except OSError:
-            self.connection.execute("DELETE FROM content_identity WHERE path=?", (str(image_path),))
-            return
+            self.remove(image_path)
+            return False
+        identity = (stat.st_size, stat.st_mtime_ns)
+        if (expected_identity is not None and identity != expected_identity) or (
+            expected_digest is not None and digest != expected_digest
+        ):
+            self.remove(image_path)
+            return False
         self.connection.execute(
             "INSERT INTO content_identity(path,digest) VALUES(?,?) "
             "ON CONFLICT(path) DO UPDATE SET digest=excluded.digest",
             (str(image_path), digest),
         )
+        return True
 
     def remove(self, path: str | Path) -> None:
         """Remove stale analysis, profile, and digest rows for a failed image."""
