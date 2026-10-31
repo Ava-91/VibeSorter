@@ -7,7 +7,7 @@ from pathlib import Path
 from .classifier import classify_profile
 from .pipeline import analyze_image
 from .scanner import find_images
-from .verified_cache import VerifiedAnalysisCache
+from .verified_cache import VerifiedAnalysisCache, _digest
 
 ProgressCallback = Callable[[dict[str, int | str]], None]
 
@@ -44,12 +44,15 @@ def index_folder(
 
         def analyze(path: Path):
             try:
-                return path, analyze_image(path), None
+                stat = path.stat()
+                identity = (stat.st_size, stat.st_mtime_ns)
+                digest = _digest(path)
+                return path, analyze_image(path), None, identity, digest
             except Exception as exc:  # pragma: no cover - exact decoder errors vary by image
-                return path, None, exc
+                return path, None, exc, None, None
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            for path, result, error in executor.map(analyze, pending):
+            for path, result, error, identity, digest in executor.map(analyze, pending):
                 if error is not None:
                     # A changed image that no longer decodes must not keep its old cached result.
                     cache.remove(path)
@@ -57,7 +60,11 @@ def index_folder(
                     if progress:
                         progress({"phase": "analyze", "completed": analyzed + skipped, "total": len(images), "skipped": skipped})
                     continue
-                cache.set(path, result.features, result.scores)
+                if not cache.set(path, result.features, result.scores, expected_identity=identity, expected_digest=digest):
+                    skipped += 1
+                    if progress:
+                        progress({"phase": "analyze", "completed": analyzed + skipped, "total": len(images), "skipped": skipped})
+                    continue
                 cache.set_profile(path, classify_profile(result.features))
                 analyzed += 1
                 if progress:

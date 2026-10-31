@@ -73,6 +73,7 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--host", default="127.0.0.1")
     command.add_argument("--port", type=int, default=8765)
     command.add_argument("--allow-network", action="store_true", help="Explicitly expose cached images on a non-loopback network interface.")
+    command.add_argument("--allow-embedding", action="store_true", help="Allow embedding only by the Tauri desktop origins.")
 
     command = subparsers.add_parser("desktop", help="Launch the local VibeSorter desktop shell.")
     command.add_argument("--db", type=Path, default=Path(".vibesorter/analysis.db"))
@@ -259,7 +260,7 @@ def _run_label(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
 def _run_browser(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     from .browser.server import run_server
     try:
-        run_server(args.db, args.host, args.port, allow_network=args.allow_network)
+        run_server(args.db, args.host, args.port, allow_network=args.allow_network, allow_embedding=args.allow_embedding)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     return 0

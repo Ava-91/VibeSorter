@@ -67,6 +67,8 @@ jobs:
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Run Tauri lifecycle unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - name: Generate Tauri app icons

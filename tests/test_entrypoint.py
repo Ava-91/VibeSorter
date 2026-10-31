@@ -170,3 +170,19 @@ def test_sample_labels_rejects_zero_count(monkeypatch, tmp_path):
         assert exc.code == 2
     else:
         raise AssertionError("expected argparse validation failure")
+
+
+def test_browser_command_passes_desktop_embedding_option(monkeypatch, tmp_path):
+    from vibesorter.browser import server
+
+    calls = []
+    monkeypatch.setattr(server, "run_server", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["vibesorter", "browser", "--db", str(tmp_path / "analysis.db"), "--allow-embedding"],
+    )
+
+    assert entrypoint.main() == 0
+    assert len(calls) == 1
+    assert calls[0][1]["allow_embedding"] is True

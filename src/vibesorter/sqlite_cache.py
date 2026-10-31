@@ -85,6 +85,8 @@ class SQLiteAnalysisCache:
                 data = json.loads(legacy_path.read_text(encoding='utf-8'))
             except (OSError, json.JSONDecodeError, TypeError):
                 data = {}
+            if not isinstance(data, dict):
+                data = {}
             if isinstance(data.get('entries'), dict):
                 for path, entry in data['entries'].items():
                     try:

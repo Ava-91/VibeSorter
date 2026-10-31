@@ -131,6 +131,7 @@ async fn start_backend(app: tauri::AppHandle, folder: String, port: u16) -> Resu
             "127.0.0.1",
             "--port",
             &port.to_string(),
+            "--allow-embedding",
         ]);
     let (mut events, child) = command
         .spawn()

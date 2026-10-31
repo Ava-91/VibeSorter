@@ -2,6 +2,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from vibesorter.cache import AnalysisCache
@@ -24,3 +25,14 @@ def test_legacy_json_features_are_invalidated_after_feature_version_change(tmp_p
     result = analyze_image(image, cache=cache)
     assert not result.cached
     assert cache.get(image) is not None
+
+
+@pytest.mark.parametrize("legacy_payload", ["[]", "null", '"not-an-object"', "42", "true"])
+def test_legacy_json_with_valid_non_object_shape_does_not_crash(tmp_path, legacy_payload):
+    cache_dir = tmp_path / ".vibesorter"
+    cache_dir.mkdir()
+    database = cache_dir / "analysis.db"
+    (cache_dir / "analysis.json").write_text(legacy_payload, encoding="utf-8")
+    cache = AnalysisCache(database)
+    assert cache.entries() == ()
+    cache.close()
