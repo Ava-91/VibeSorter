@@ -169,3 +169,19 @@ Update the counts from the labels actually used; zeroes above are placeholders, 
 5. Keep machine-dependent timing benchmarks separate from classifier-quality comparisons.
 
 For a private library, the reproducible artifact is the label file plus its metadata stored locally—not a commit containing private photographs or personal filesystem paths. CI uses synthetic fixtures for metric contracts; it does not pretend those fixtures represent real-world classifier quality.
+
+
+## 6. Release benchmark protocol
+
+A release-quality classifier benchmark must use human decisions, not synthetic images or the classifier's own predictions as labels. The repository intentionally does not contain a private photo library or its labels.
+
+For a meaningful local benchmark:
+
+1. Label at least 150 representative images with the assisted `label` workflow. Include examples from every supported vibe; aim for at least 20 human-labelled examples per vibe before interpreting per-vibe metrics.
+2. Keep the label guide revision, collection scope, sampling method, and class counts in the adjacent metadata file described above.
+3. Split by source collection or capture session into development and holdout sets (for example, 70/30). Do not tune thresholds or feature weights against the holdout set.
+4. Run `vibesorter evaluate` on both sets and retain the JSON reports locally. Compare accuracy, per-vibe precision/recall/F1, confusion matrix, ambiguity, and calibration error.
+5. Independently review a random subset or ask a second reviewer to check ambiguous labels before treating the set as ground truth.
+6. Re-run the same holdout set for each candidate release; an overall accuracy increase does not count as an improvement if a well-supported class regresses materially.
+
+CI validates metric calculations and synthetic fixtures only. It cannot certify real-world classifier quality until a representative human-labelled corpus has been collected and evaluated. Never upload private photos or path-bearing label files merely to make a CI badge green.

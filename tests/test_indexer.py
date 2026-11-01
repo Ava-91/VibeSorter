@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from pathlib import Path
 
 from PIL import Image
@@ -41,7 +42,7 @@ def test_index_folder_populates_sqlite_and_reuses_unchanged_images(tmp_path, mon
             self.features = _features(path)
             self.scores = (VibeScore("Dark / Moody", 0.8), VibeScore("Soft / Pastel", 0.4))
 
-    def fake_analyze(path):
+    def fake_analyze(path, *, image_bytes=None):
         calls.append(path)
         return Result(path)
 
@@ -79,7 +80,7 @@ def test_index_folder_reanalyzes_changed_and_removes_deleted_images(tmp_path, mo
             self.features = _features(path)
             self.scores = (VibeScore("Retro Blue", 0.7),)
 
-    monkeypatch.setattr(indexer, "analyze_image", lambda path: (calls.append(path) or Result(path)))
+    monkeypatch.setattr(indexer, "analyze_image", lambda path, *, image_bytes=None: (calls.append(path) or Result(path)))
 
     indexer.index_folder(tmp_path, workers=1)
     calls.clear()
@@ -107,8 +108,8 @@ def test_index_folder_removes_stale_cache_when_changed_image_becomes_corrupt(tmp
             self.features = _features(path)
             self.scores = (VibeScore("Retro Blue", 0.7),)
 
-    def fake_analyze(path):
-        if path.read_bytes() == b"corrupt image":
+    def fake_analyze(path, *, image_bytes=None):
+        if image_bytes == b"corrupt image":
             raise OSError("simulated corrupt image")
         return Result(path)
 
@@ -123,5 +124,97 @@ def test_index_folder_removes_stale_cache_when_changed_image_becomes_corrupt(tmp
 
     db = tmp_path / ".vibesorter" / "analysis.db"
     with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM images WHERE path=?", (str(image),)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM content_identity WHERE path=?", (str(image),)).fetchone()[0] == 0
+
+
+def test_index_folder_rejects_oversized_snapshot_before_reading(tmp_path, monkeypatch):
+    image = tmp_path / "large.png"
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(image)
+    read_paths = []
+    original_open = Path.open
+
+    def track_open(path, *args, **kwargs):
+        if path == image:
+            read_paths.append(path)
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(indexer, "MAX_SNAPSHOT_BYTES", image.stat().st_size - 1)
+    monkeypatch.setattr(Path, "open", track_open)
+
+    result = indexer.index_folder(tmp_path, workers=1)
+
+    assert result["skipped"] == 1
+    assert result["analyzed"] == 0
+    assert read_paths == []
+
+
+def test_snapshot_memory_budget_waits_until_capacity_is_released():
+    budget = indexer._SnapshotMemoryBudget(10)
+    assert budget.reserve(7)
+
+    started = threading.Event()
+    acquired = threading.Event()
+
+    def reserve_second_snapshot():
+        started.set()
+        assert budget.reserve(7)
+        acquired.set()
+
+    worker = threading.Thread(target=reserve_second_snapshot)
+    worker.start()
+    assert started.wait(timeout=1)
+    assert not acquired.wait(timeout=0.05)
+
+    budget.release(7)
+    assert acquired.wait(timeout=1)
+    budget.release(7)
+    worker.join(timeout=1)
+    assert not worker.is_alive()
+
+
+def test_index_folder_caps_snapshot_memory_across_workers(tmp_path, monkeypatch):
+    image = tmp_path / "large.png"
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(image)
+    image_size = image.stat().st_size
+    read_paths = []
+    original_open = Path.open
+
+    def track_open(path, *args, **kwargs):
+        if path == image:
+            read_paths.append(path)
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(indexer, "MAX_SNAPSHOT_BYTES", image_size * 2)
+    monkeypatch.setattr(indexer, "MAX_SNAPSHOT_MEMORY_BYTES", image_size - 1)
+    monkeypatch.setattr(Path, "open", track_open)
+
+    result = indexer.index_folder(tmp_path, workers=2)
+
+    assert result["skipped"] == 1
+    assert result["analyzed"] == 0
+    assert read_paths == []
+
+
+def test_index_folder_does_not_cache_features_if_image_changes_during_analysis(tmp_path, monkeypatch):
+    image = tmp_path / "racing.png"
+    Image.new("RGB", (4, 4), (10, 20, 30)).save(image)
+
+    class Result:
+        def __init__(self, path):
+            self.features = _features(path)
+            self.scores = (VibeScore("Retro Blue", 0.7),)
+
+    def mutate_during_analysis(path, *, image_bytes=None):
+        assert image_bytes == path.read_bytes()
+        result = Result(path)
+        path.write_bytes(path.read_bytes() + b"changed-after-decode")
+        return result
+
+    monkeypatch.setattr(indexer, "analyze_image", mutate_during_analysis)
+    outcome = indexer.index_folder(tmp_path, workers=1)
+    assert outcome["analyzed"] == 0
+    assert outcome["skipped"] == 1
+    with sqlite3.connect(tmp_path / ".vibesorter" / "analysis.db") as conn:
         assert conn.execute("SELECT COUNT(*) FROM images WHERE path=?", (str(image),)).fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM content_identity WHERE path=?", (str(image),)).fetchone()[0] == 0

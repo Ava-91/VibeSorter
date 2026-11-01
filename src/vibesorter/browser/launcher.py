@@ -30,10 +30,11 @@ def main() -> int:
         action="store_true",
         help="Allow binding to a non-loopback host and exposing cached images to the network.",
     )
+    parser.add_argument("--allow-embedding", action="store_true", help="Allow embedding only by the Tauri desktop origins.")
     args = parser.parse_args()
     if not args.allow_network and not _is_loopback(args.host):
         parser.error("non-loopback browser hosts require --allow-network")
-    run_server(args.db, host=args.host, port=args.port, allow_network=args.allow_network)
+    run_server(args.db, host=args.host, port=args.port, allow_network=args.allow_network, allow_embedding=args.allow_embedding)
     return 0
 
 
