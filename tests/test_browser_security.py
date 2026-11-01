@@ -3,9 +3,9 @@ from __future__ import annotations
 import sqlite3
 import threading
 from http.server import ThreadingHTTPServer
-from urllib.parse import quote
 from pathlib import Path
 from urllib.error import HTTPError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 import pytest
