@@ -86,7 +86,8 @@ def index_folder(
                 if not snapshot_budget.reserve(stat.st_size):
                     raise ValueError(f"Image file exceeds the {MAX_SNAPSHOT_MEMORY_BYTES:,}-byte concurrent snapshot budget: {path}")
                 reserved = stat.st_size
-                image_bytes = path.read_bytes()
+                with path.open("rb") as source:
+                    image_bytes = source.read(stat.st_size)
                 if len(image_bytes) != stat.st_size:
                     raise ValueError(f"Image changed size while its snapshot was being read: {path}")
                 identity = (stat.st_size, stat.st_mtime_ns)
