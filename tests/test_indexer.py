@@ -41,7 +41,7 @@ def test_index_folder_populates_sqlite_and_reuses_unchanged_images(tmp_path, mon
             self.features = _features(path)
             self.scores = (VibeScore("Dark / Moody", 0.8), VibeScore("Soft / Pastel", 0.4))
 
-    def fake_analyze(path):
+    def fake_analyze(path, *, image_bytes=None):
         calls.append(path)
         return Result(path)
 
@@ -107,8 +107,8 @@ def test_index_folder_removes_stale_cache_when_changed_image_becomes_corrupt(tmp
             self.features = _features(path)
             self.scores = (VibeScore("Retro Blue", 0.7),)
 
-    def fake_analyze(path):
-        if path.read_bytes() == b"corrupt image":
+    def fake_analyze(path, *, image_bytes=None):
+        if image_bytes == b"corrupt image":
             raise OSError("simulated corrupt image")
         return Result(path)
 
@@ -136,7 +136,8 @@ def test_index_folder_does_not_cache_features_if_image_changes_during_analysis(t
             self.features = _features(path)
             self.scores = (VibeScore("Retro Blue", 0.7),)
 
-    def mutate_during_analysis(path):
+    def mutate_during_analysis(path, *, image_bytes=None):
+        assert image_bytes == path.read_bytes()
         result = Result(path)
         path.write_bytes(path.read_bytes() + b"changed-after-decode")
         return result
