@@ -79,7 +79,7 @@ def test_index_folder_reanalyzes_changed_and_removes_deleted_images(tmp_path, mo
             self.features = _features(path)
             self.scores = (VibeScore("Retro Blue", 0.7),)
 
-    monkeypatch.setattr(indexer, "analyze_image", lambda path: (calls.append(path) or Result(path)))
+    monkeypatch.setattr(indexer, "analyze_image", lambda path, *, image_bytes=None: (calls.append(path) or Result(path)))
 
     indexer.index_folder(tmp_path, workers=1)
     calls.clear()
