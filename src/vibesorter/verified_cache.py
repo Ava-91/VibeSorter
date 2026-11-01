@@ -73,20 +73,18 @@ class VerifiedAnalysisCache(AnalysisCache):
         """Store results only when the file still matches its pre-analysis identity."""
         image_path = Path(path).expanduser()
         try:
+            super().set(image_path, features, scores)
             stat = image_path.stat()
             digest = _digest(image_path)
         except OSError:
-            # Keep any previous cache row intact. It will only be reused if its
-            # own stored identity still matches the file on a later scan.
+            self.remove(image_path)
             return False
         identity = (stat.st_size, stat.st_mtime_ns)
         if (expected_identity is not None and identity != expected_identity) or (
             expected_digest is not None and digest != expected_digest
         ):
-            # Do not associate features from a changed source with its new
-            # identity, and do not destroy a previously valid cached result.
+            self.remove(image_path)
             return False
-        super().set(image_path, features, scores)
         self.connection.execute(
             "INSERT INTO content_identity(path,digest) VALUES(?,?) "
             "ON CONFLICT(path) DO UPDATE SET digest=excluded.digest",
