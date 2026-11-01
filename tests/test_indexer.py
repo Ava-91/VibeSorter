@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from pathlib import Path
 
 from PIL import Image
@@ -148,6 +149,30 @@ def test_index_folder_rejects_oversized_snapshot_before_reading(tmp_path, monkey
     assert read_paths == []
 
 
+def test_snapshot_memory_budget_waits_until_capacity_is_released():
+    budget = indexer._SnapshotMemoryBudget(10)
+    assert budget.reserve(7)
+
+    started = threading.Event()
+    acquired = threading.Event()
+
+    def reserve_second_snapshot():
+        started.set()
+        assert budget.reserve(7)
+        acquired.set()
+
+    worker = threading.Thread(target=reserve_second_snapshot)
+    worker.start()
+    assert started.wait(timeout=1)
+    assert not acquired.wait(timeout=0.05)
+
+    budget.release(7)
+    assert acquired.wait(timeout=1)
+    budget.release(7)
+    worker.join(timeout=1)
+    assert not worker.is_alive()
+
+
 def test_index_folder_caps_snapshot_memory_across_workers(tmp_path, monkeypatch):
     image = tmp_path / "large.png"
     Image.new("RGB", (2, 2), (10, 20, 30)).save(image)
@@ -161,7 +186,7 @@ def test_index_folder_caps_snapshot_memory_across_workers(tmp_path, monkeypatch)
         return original_read_bytes(path)
 
     monkeypatch.setattr(indexer, "MAX_SNAPSHOT_BYTES", image_size * 2)
-    monkeypatch.setattr(indexer, "MAX_SNAPSHOT_MEMORY_BYTES", image_size * 2 - 1)
+    monkeypatch.setattr(indexer, "MAX_SNAPSHOT_MEMORY_BYTES", image_size - 1)
     monkeypatch.setattr(Path, "read_bytes", track_read_bytes)
 
     result = indexer.index_folder(tmp_path, workers=2)
