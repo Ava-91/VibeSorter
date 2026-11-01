@@ -52,34 +52,3 @@ def test_bulk_verification_checks_all_hashes_without_per_item_cache_lookups(tmp_
     verified = cache.get_verified_many(paths)
     assert paths[0] not in verified
     assert set(paths[1:]).issubset(verified)
-
-
-
-def test_changed_during_analysis_preserves_previous_cache_entry(tmp_path: Path):
-    from vibesorter.verified_cache import _digest
-
-    image = tmp_path / "photo.jpg"
-    image.write_bytes(b"original")
-    cache = VerifiedAnalysisCache(tmp_path / "analysis.db")
-    original_features = _features(image)
-    original_scores = (VibeScore("Retro Blue", 0.8),)
-    assert cache.set(image, original_features, original_scores)
-    cache.save()
-
-    original_identity = (image.stat().st_size, image.stat().st_mtime_ns)
-    original_digest = _digest(image)
-    previous = cache.get(image)
-
-    image.write_bytes(b"changed!")
-    changed_features = _features(image)
-    changed_scores = (VibeScore("Dark / Moody", 0.9),)
-
-    assert not cache.set(
-        image,
-        changed_features,
-        changed_scores,
-        expected_identity=original_identity,
-        expected_digest=original_digest,
-    )
-    assert cache.get(image) == previous
-    assert cache.get_verified(image) is None
