@@ -21,14 +21,14 @@ class AnalysisResult:
     def vibes(self) -> tuple[VibeScore, ...]:
         return select_vibes(self.scores)
 
-def analyze_image(path: Path, *, cache: AnalysisCache | None = None) -> AnalysisResult:
+def analyze_image(path: Path, *, cache: AnalysisCache | None = None, image_bytes: bytes | None = None) -> AnalysisResult:
     image_path = Path(path).expanduser()
     if cache is not None:
         cached = cache.get(image_path)
         if cached is not None:
             features, scores = cached
             return AnalysisResult(image_path, features, scores[0], scores, cached=True)
-    features = extract_features(image_path); scores = score_vibes(features)
+    features = extract_features(image_path, image_bytes=image_bytes); scores = score_vibes(features)
     if cache is not None: cache.set(image_path, features, scores)
     return AnalysisResult(image_path, features, scores[0], scores)
 
