@@ -148,6 +148,29 @@ def test_index_folder_rejects_oversized_snapshot_before_reading(tmp_path, monkey
     assert read_paths == []
 
 
+def test_index_folder_caps_snapshot_memory_across_workers(tmp_path, monkeypatch):
+    image = tmp_path / "large.png"
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(image)
+    image_size = image.stat().st_size
+    read_paths = []
+    original_read_bytes = Path.read_bytes
+
+    def track_read_bytes(path):
+        if path == image:
+            read_paths.append(path)
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(indexer, "MAX_SNAPSHOT_BYTES", image_size * 2)
+    monkeypatch.setattr(indexer, "MAX_SNAPSHOT_MEMORY_BYTES", image_size * 2 - 1)
+    monkeypatch.setattr(Path, "read_bytes", track_read_bytes)
+
+    result = indexer.index_folder(tmp_path, workers=2)
+
+    assert result["skipped"] == 1
+    assert result["analyzed"] == 0
+    assert read_paths == []
+
+
 def test_index_folder_does_not_cache_features_if_image_changes_during_analysis(tmp_path, monkeypatch):
     image = tmp_path / "racing.png"
     Image.new("RGB", (4, 4), (10, 20, 30)).save(image)
