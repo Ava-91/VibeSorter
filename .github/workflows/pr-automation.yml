@@ -67,6 +67,18 @@ jobs:
               }
             }
 
+            // Keep the lifecycle label accurate when a PR is reopened or closed again.
+            const staleLabels = context.payload.action === 'closed'
+              ? ['open']
+              : ['closed', 'merged'];
+            for (const staleLabel of staleLabels) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name: staleLabel });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }
+
             // Add labels without removing labels already applied by Dependabot or maintainers.
             await github.rest.issues.addLabels({
               owner,
