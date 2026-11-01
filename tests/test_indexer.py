@@ -132,15 +132,15 @@ def test_index_folder_rejects_oversized_snapshot_before_reading(tmp_path, monkey
     image = tmp_path / "large.png"
     Image.new("RGB", (2, 2), (10, 20, 30)).save(image)
     read_paths = []
-    original_read_bytes = Path.read_bytes
+    original_open = Path.open
 
-    def track_read_bytes(path):
+    def track_open(path, *args, **kwargs):
         if path == image:
             read_paths.append(path)
-        return original_read_bytes(path)
+        return original_open(path, *args, **kwargs)
 
     monkeypatch.setattr(indexer, "MAX_SNAPSHOT_BYTES", image.stat().st_size - 1)
-    monkeypatch.setattr(Path, "read_bytes", track_read_bytes)
+    monkeypatch.setattr(Path, "open", track_open)
 
     result = indexer.index_folder(tmp_path, workers=1)
 
@@ -178,16 +178,16 @@ def test_index_folder_caps_snapshot_memory_across_workers(tmp_path, monkeypatch)
     Image.new("RGB", (2, 2), (10, 20, 30)).save(image)
     image_size = image.stat().st_size
     read_paths = []
-    original_read_bytes = Path.read_bytes
+    original_open = Path.open
 
-    def track_read_bytes(path):
+    def track_open(path, *args, **kwargs):
         if path == image:
             read_paths.append(path)
-        return original_read_bytes(path)
+        return original_open(path, *args, **kwargs)
 
     monkeypatch.setattr(indexer, "MAX_SNAPSHOT_BYTES", image_size * 2)
     monkeypatch.setattr(indexer, "MAX_SNAPSHOT_MEMORY_BYTES", image_size - 1)
-    monkeypatch.setattr(Path, "read_bytes", track_read_bytes)
+    monkeypatch.setattr(Path, "open", track_open)
 
     result = indexer.index_folder(tmp_path, workers=2)
 
