@@ -11,6 +11,7 @@ from .scanner import find_images
 from .verified_cache import VerifiedAnalysisCache
 
 MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024
+MAX_SNAPSHOT_MEMORY_BYTES = 256 * 1024 * 1024
 
 ProgressCallback = Callable[[dict[str, int | str]], None]
 
@@ -45,14 +46,17 @@ def index_folder(
         if progress:
             progress({"phase": "analyze", "total": len(images), "pending": len(pending), "reused": reused})
 
+        # Keep concurrent immutable snapshots within a fixed memory budget.
+        snapshot_limit = min(MAX_SNAPSHOT_BYTES, max(1, MAX_SNAPSHOT_MEMORY_BYTES // workers))
+
         def analyze(path: Path):
             try:
                 # Analyze an immutable byte snapshot. Hashing the path and then
                 # reopening it for decoding leaves a TOCTOU window where the
                 # digest and extracted features can describe different bytes.
                 stat = path.stat()
-                if stat.st_size > MAX_SNAPSHOT_BYTES:
-                    raise ValueError(f"Image file exceeds {MAX_SNAPSHOT_BYTES:,}-byte limit: {path}")
+                if stat.st_size > snapshot_limit:
+                    raise ValueError(f"Image file exceeds the {snapshot_limit:,}-byte snapshot limit for {workers} worker(s): {path}")
                 image_bytes = path.read_bytes()
                 identity = (stat.st_size, stat.st_mtime_ns)
                 digest = hashlib.sha256(image_bytes).hexdigest()
