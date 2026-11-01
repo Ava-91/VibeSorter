@@ -399,13 +399,14 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
                     return False
             return True
 
-        def _security_headers(self) -> None:
+        def _security_headers(self, *, allow_cross_origin_embedding: bool = False) -> None:
             self.send_header("X-Content-Type-Options", "nosniff")
             if not allow_embedding:
                 self.send_header("X-Frame-Options", "DENY")
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Cross-Origin-Resource-Policy", "cross-origin" if allow_embedding else "same-origin")
+            resource_policy = "cross-origin" if allow_embedding and allow_cross_origin_embedding else "same-origin"
+            self.send_header("Cross-Origin-Resource-Policy", resource_policy)
             self.send_header(
                 "Content-Security-Policy",
                 "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
@@ -414,12 +415,19 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
                 + "base-uri 'self'; form-action 'self'",
             )
 
-        def _send(self, status: int, content: str, content_type: str = "text/html; charset=utf-8") -> None:
+        def _send(
+            self,
+            status: int,
+            content: str,
+            content_type: str = "text/html; charset=utf-8",
+            *,
+            allow_cross_origin_embedding: bool = False,
+        ) -> None:
             body = content.encode()
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
-            self._security_headers()
+            self._security_headers(allow_cross_origin_embedding=allow_cross_origin_embedding)
             self.end_headers()
             self.wfile.write(body)
 
@@ -443,7 +451,7 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
                 if label_session is None:
                     self._send(404, "Labeling session not configured", "text/plain; charset=utf-8")
                 else:
-                    self._send(200, render_label_page(label_session))
+                    self._send(200, render_label_page(label_session), allow_cross_origin_embedding=True)
                 return
             if parsed.path == "/api/status":
                 self._json(200, _database_status(db))
@@ -504,7 +512,7 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
             if parsed.path != "/":
                 self._send(404, "Not found", "text/plain; charset=utf-8")
                 return
-            self._send(200, render_page())
+            self._send(200, render_page(), allow_cross_origin_embedding=True)
 
         def do_POST(self) -> None:
             if not self._request_allowed(require_origin=True):
