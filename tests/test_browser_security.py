@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import sqlite3
 import threading
 from http.server import ThreadingHTTPServer
+from urllib.parse import quote
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -72,7 +74,13 @@ def test_non_loopback_binding_requires_explicit_opt_in(capsys):
 
 
 def test_desktop_embedding_is_limited_to_tauri_origins(tmp_path: Path):
-    server, thread, base = _serve(tmp_path / "missing.db", allow_embedding=True)
+    db = tmp_path / "analysis.db"
+    image = tmp_path / "private-photo.png"
+    image.write_bytes(b"private-image-bytes")
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE analysis (path TEXT PRIMARY KEY)")
+        conn.execute("INSERT INTO analysis VALUES (?)", (str(image),))
+    server, thread, base = _serve(db, allow_embedding=True)
     try:
         with urlopen(base + "/", timeout=3) as response:
             assert response.headers.get("X-Frame-Options") is None
@@ -81,6 +89,9 @@ def test_desktop_embedding_is_limited_to_tauri_origins(tmp_path: Path):
             assert "frame-ancestors tauri://localhost http://tauri.localhost" in policy
             assert "frame-ancestors 'none'" not in policy
         with urlopen(base + "/api/status", timeout=3) as response:
+            assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"
+        with urlopen(base + "/api/image?path=" + quote(str(image)), timeout=3) as response:
+            assert response.read() == b"private-image-bytes"
             assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"
     finally:
         server.shutdown()
