@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 import hashlib
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .classifier import classify_profile
 from .pipeline import analyze_image
 from .scanner import find_images
-from .verified_cache import VerifiedAnalysisCache, _digest
+from .verified_cache import VerifiedAnalysisCache
 
 ProgressCallback = Callable[[dict[str, int | str]], None]
 
