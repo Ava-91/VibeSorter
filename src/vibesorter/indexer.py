@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -44,10 +45,14 @@ def index_folder(
 
         def analyze(path: Path):
             try:
+                # Analyze an immutable byte snapshot. Hashing the path and then
+                # reopening it for decoding leaves a TOCTOU window where the
+                # digest and extracted features can describe different bytes.
+                image_bytes = path.read_bytes()
                 stat = path.stat()
                 identity = (stat.st_size, stat.st_mtime_ns)
-                digest = _digest(path)
-                return path, analyze_image(path), None, identity, digest
+                digest = hashlib.sha256(image_bytes).hexdigest()
+                return path, analyze_image(path, image_bytes=image_bytes), None, identity, digest
             except Exception as exc:  # pragma: no cover - exact decoder errors vary by image
                 return path, None, exc, None, None
 
