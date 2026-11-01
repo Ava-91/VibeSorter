@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import math
 import warnings
 from dataclasses import dataclass
@@ -139,13 +140,21 @@ def _center_deltas(image: Image.Image) -> tuple[float, float]:
     )
 
 
-def extract_features(path: str | Path) -> ImageFeatures:
-    """Extract lightweight global and spatial visual signals."""
+def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> ImageFeatures:
+    """Extract lightweight global and spatial visual signals.
+
+    When supplied, decode the exact byte snapshot captured by the caller rather
+    than reopening a path that may change during analysis.
+    """
     image_path = Path(path).expanduser()
+
+    def open_source():
+        return Image.open(io.BytesIO(image_bytes) if image_bytes is not None else image_path)
+
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(image_path) as source:
+            with open_source() as source:
                 if source.width * source.height > MAX_IMAGE_PIXELS:
                     raise ValueError(
                         f"Image exceeds the {MAX_IMAGE_PIXELS:,}-pixel safety limit: {image_path}"
@@ -154,7 +163,7 @@ def extract_features(path: str | Path) -> ImageFeatures:
                 source.verify()
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(image_path) as source:
+            with open_source() as source:
                 if source.width * source.height > MAX_IMAGE_PIXELS:
                     raise ValueError(
                         f"Image exceeds the {MAX_IMAGE_PIXELS:,}-pixel safety limit: {image_path}"
