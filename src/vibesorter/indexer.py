@@ -10,6 +10,8 @@ from .pipeline import analyze_image
 from .scanner import find_images
 from .verified_cache import VerifiedAnalysisCache
 
+MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024
+
 ProgressCallback = Callable[[dict[str, int | str]], None]
 
 
@@ -48,8 +50,10 @@ def index_folder(
                 # Analyze an immutable byte snapshot. Hashing the path and then
                 # reopening it for decoding leaves a TOCTOU window where the
                 # digest and extracted features can describe different bytes.
-                image_bytes = path.read_bytes()
                 stat = path.stat()
+                if stat.st_size > MAX_SNAPSHOT_BYTES:
+                    raise ValueError(f"Image file exceeds {MAX_SNAPSHOT_BYTES:,}-byte limit: {path}")
+                image_bytes = path.read_bytes()
                 identity = (stat.st_size, stat.st_mtime_ns)
                 digest = hashlib.sha256(image_bytes).hexdigest()
                 return path, analyze_image(path, image_bytes=image_bytes), None, identity, digest

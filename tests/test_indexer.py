@@ -127,6 +127,27 @@ def test_index_folder_removes_stale_cache_when_changed_image_becomes_corrupt(tmp
         assert conn.execute("SELECT COUNT(*) FROM content_identity WHERE path=?", (str(image),)).fetchone()[0] == 0
 
 
+def test_index_folder_rejects_oversized_snapshot_before_reading(tmp_path, monkeypatch):
+    image = tmp_path / "large.png"
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(image)
+    read_paths = []
+    original_read_bytes = Path.read_bytes
+
+    def track_read_bytes(path):
+        if path == image:
+            read_paths.append(path)
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(indexer, "MAX_SNAPSHOT_BYTES", image.stat().st_size - 1)
+    monkeypatch.setattr(Path, "read_bytes", track_read_bytes)
+
+    result = indexer.index_folder(tmp_path, workers=1)
+
+    assert result["skipped"] == 1
+    assert result["analyzed"] == 0
+    assert read_paths == []
+
+
 def test_index_folder_does_not_cache_features_if_image_changes_during_analysis(tmp_path, monkeypatch):
     image = tmp_path / "racing.png"
     Image.new("RGB", (4, 4), (10, 20, 30)).save(image)

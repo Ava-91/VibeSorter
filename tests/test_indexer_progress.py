@@ -20,7 +20,7 @@ def test_index_folder_reports_progress_phases_and_counts(tmp_path, monkeypatch):
         features = _features(image)
         scores = (VibeScore("Dark / Moody", 0.8),)
 
-    monkeypatch.setattr(indexer, "analyze_image", lambda path: Result())
+    monkeypatch.setattr(indexer, "analyze_image", lambda path, image_bytes=None: Result())
     result = indexer.index_folder(tmp_path, workers=1, progress=events.append)
 
     assert [event["phase"] for event in events] == ["scan", "analyze", "analyze", "complete"]
