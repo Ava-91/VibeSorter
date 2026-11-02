@@ -40,12 +40,12 @@ jobs:
               "",
               "Workflow **" + run.name + "** failed for commit " + run.head_sha.slice(0, 12) + ".",
               "",
-              failed.length ? failed.join("\\n") : "GitHub reported a failed run; no failed job details were returned.",
+              failed.length ? failed.join("\n") : "GitHub reported a failed run; no failed job details were returned.",
               "",
               "[Open workflow run](" + run.html_url + ")",
               "",
               "This is a diagnostic summary, not an automated fix."
-            ].join("\\n");
+            ].join("\n");
             for (const pr of prs) {
               const comments = await github.rest.issues.listComments({
                 ...context.repo,
@@ -61,5 +61,5 @@ jobs:
             }
             await core.summary
               .addHeading("CI failure analyst")
-              .addRaw("Workflow: " + run.name + "\\n\\nFailed jobs: " + failed.length + "\\n\\n" + run.html_url)
+              .addRaw("Workflow: " + run.name + "\n\nFailed jobs: " + failed.length + "\n\n" + run.html_url)
               .write();
