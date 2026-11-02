@@ -169,6 +169,16 @@ path/to/photos/.vibesorter/analysis.db
 
 The legacy `preview`, `stats`, and `propose` commands also persist the analyses they perform to the same cache.
 
+### Optional: monitor a changing library
+
+Keep the cache synchronized while you add, edit, or remove images:
+
+```bash
+vibesorter watch "path/to/photos" --interval 60
+```
+
+The monitor performs an initial incremental index, then checks image path, size, and modification-time metadata every 60 seconds by default. It only re-indexes after a detected change. Use `--no-recursive` to watch only the selected folder, and press Ctrl+C to stop. This is an explicit foreground command, not an installed background service. It updates VibeSorter's local cache and never moves, renames, or edits source images.
+
 ### 4. Inspect statistics
 
 ```bash
