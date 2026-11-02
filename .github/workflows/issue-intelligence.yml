@@ -1,0 +1,60 @@
+name: Issue intelligence
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  duplicate-suggestions:
+    if: github.event.issue.state == 'open' && github.event.sender.type != 'Bot'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find likely duplicate issues without auto-closing
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const stop = new Set(["about","after","also","could","from","have","into","issue","need","that","this","when","with","would","your"]);
+            const tokens = value => new Set(
+              value.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, " ")
+                .split(/\\s+/).filter(word => word.length > 2 && !stop.has(word))
+            );
+            const current = tokens(issue.title);
+            if (!current.size) return;
+            const query = "repo:" + context.repo.owner + "/" + context.repo.repo + " is:issue is:open " +
+              [...current].slice(0, 6).map(word => "in:title " + word).join(" ");
+            const search = await github.rest.search.issuesAndPullRequests({q: query, per_page: 20, sort: "updated", order: "desc"});
+            const candidates = search.data.items
+              .filter(item => item.number !== issue.number)
+              .map(item => {
+                const other = tokens(item.title);
+                const intersection = [...current].filter(word => other.has(word)).length;
+                const union = new Set([...current, ...other]).size;
+                return {...item, similarity: union ? intersection / union : 0};
+              })
+              .filter(item => item.similarity >= 0.55)
+              .sort((a, b) => b.similarity - a.similarity)
+              .slice(0, 5);
+            if (!candidates.length) return;
+            const marker = "<!-- issue-intelligence:duplicate-suggestions -->";
+            const comments = await github.rest.issues.listComments({...context.repo, issue_number: issue.number, per_page: 100});
+            if (comments.data.some(comment => comment.body?.includes(marker))) return;
+            const lines = candidates.map(item => "- #" + item.number + " — " + item.title + " (" + Math.round(item.similarity * 100) + "% title overlap)");
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: issue.number,
+              body: [
+                marker,
+                "## Possible related issues",
+                "",
+                "These open issues have overlapping title keywords. Please compare their descriptions before deciding whether this is a duplicate:",
+                "",
+                ...lines,
+                "",
+                "No issue was closed or changed automatically."
+              ].join("\\n")
+            });
