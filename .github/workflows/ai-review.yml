@@ -1,0 +1,38 @@
+name: AI pull request review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.event.sender.type != 'Bot' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check whether an AI provider key is configured
+        id: provider
+        shell: bash
+        env:
+          OPENAI_KEY: \${{ secrets.OPENAI_KEY }}
+        run: |
+          if [[ -n "$OPENAI_KEY" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "PR-Agent is configured but skipped: add the OPENAI_KEY Actions secret to enable AI reviews."
+          fi
+      - name: Run PR-Agent review
+        if: steps.provider.outputs.enabled == 'true'
+        uses: the-pr-agent/pr-agent@c6a076d6f9fb59029341b0b4f5662ed522d11589
+        env:
+          OPENAI_KEY: \${{ secrets.OPENAI_KEY }}
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_improve: "false"
