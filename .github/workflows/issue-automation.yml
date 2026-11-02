@@ -60,6 +60,12 @@ jobs:
                 } catch (error) {
                   if (error.status !== 422) throw error;
                 }
+              } else {
+                await github.rest.issues.updateLabel({
+                  owner, repo, name: label.name,
+                  color: label.color,
+                  description: label.description,
+                });
               }
             }
 
