@@ -20,8 +20,8 @@ jobs:
             const issue = context.payload.issue;
             const stop = new Set(["about","after","also","could","from","have","into","issue","need","that","this","when","with","would","your"]);
             const tokens = value => new Set(
-              value.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, " ")
-                .split(/\\s+/).filter(word => word.length > 2 && !stop.has(word))
+              value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ")
+                .split(/\s+/).filter(word => word.length > 2 && !stop.has(word))
             );
             const current = tokens(issue.title);
             if (!current.size) return;
@@ -56,5 +56,5 @@ jobs:
                 ...lines,
                 "",
                 "No issue was closed or changed automatically."
-              ].join("\\n")
+              ].join("\n")
             });
