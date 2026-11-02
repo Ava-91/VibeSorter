@@ -17,6 +17,7 @@ from .duplicates import (
 )
 from .gallery import gallery_from_file
 from .history import list_history, record_batch, rollback_batch
+from .monitor import monitor_folder
 from .operations import apply_reviewed
 from .pipeline import analyze_image
 from .proposal import (
@@ -340,6 +341,25 @@ def _run_rollback(args, parser) -> int:
     return 1 if problems else 0
 
 
+def _run_watch(args, parser) -> int:
+    def report(result: dict[str, int | str]) -> None:
+        print(
+            f"[watch] total={result['total']} analyzed={result['analyzed']} "
+            f"reused={result['reused']} skipped={result['skipped']} "
+            f"removed={result['removed']}"
+        )
+
+    print(f"Monitoring {args.folder.expanduser()} every {args.interval:g} seconds. Press Ctrl+C to stop.")
+    try:
+        monitor_folder(args.folder, interval=args.interval, workers=args.workers, on_update=report)
+    except KeyboardInterrupt:
+        print("\\nStopped monitoring. The local analysis cache is preserved.")
+        return 0
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
+    return 0
+
+
 def _run_history(args) -> int:
     entries = list_history(args.history)
     if args.json: print(json.dumps(entries, indent=2, ensure_ascii=False))
@@ -361,6 +381,7 @@ def main() -> int:
     if args.command == "apply": return _run_apply(args, parser)
     if args.command == "rollback": return _run_rollback(args, parser)
     if args.command == "history": return _run_history(args)
+    if args.command == "watch": return _run_watch(args, parser)
     if args.command == "analyze": return _run_analyze(args, parser)
     parser.error(f"unknown command: {args.command}"); return 2
 
