@@ -26,7 +26,9 @@ def test_monitor_reindexes_when_snapshot_changes(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(monitor, "_snapshot", lambda _folder: next(snapshots))
 
     def fake_index(_folder: str | Path, *, workers: int) -> dict[str, int | str]:
+        assert workers >= 1
         result = {"total": len(calls) + 1, "analyzed": 1, "reused": 0, "skipped": 0, "removed": 0, "database": "cache.db"}
+        calls.append(result)
         return result
 
     monkeypatch.setattr(monitor, "index_folder", fake_index)
