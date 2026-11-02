@@ -1,0 +1,122 @@
+name: Issue automation
+
+on:
+  issues:
+    types: [opened, reopened, edited, closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-automation-${{ github.event.issue.number || 'backfill' }}
+  cancel-in-progress: false
+
+jobs:
+  assign-and-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign Ava and apply consistent issue labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const definitions = [
+              { name: 'issue', color: '1D76DB', description: 'Repository issue' },
+              { name: 'automation', color: '0E8A16', description: 'Managed by repository automation' },
+              { name: 'type: bug', color: 'D73A4A', description: 'A defect or incorrect behavior' },
+              { name: 'type: feature', color: 'A2EEEF', description: 'A new capability or enhancement' },
+              { name: 'type: documentation', color: '0075CA', description: 'Documentation or wording work' },
+              { name: 'type: testing', color: 'BFD4F2', description: 'Tests, validation, or quality coverage' },
+              { name: 'type: maintenance', color: 'EDEDED', description: 'Maintenance, cleanup, or dependency work' },
+              { name: 'type: research', color: 'D4C5F9', description: 'Evaluation, investigation, or measurement' },
+              { name: 'type: release', color: '5319E7', description: 'Packaging, publishing, or release process' },
+              { name: 'type: security', color: 'B60205', description: 'Security or privacy hardening' },
+              { name: 'area: desktop', color: 'C2E0C6', description: 'Desktop application and sidecar' },
+              { name: 'area: browser', color: 'C5DEF5', description: 'Browser UI, API, and filtering' },
+              { name: 'area: cli', color: 'D4C5F9', description: 'Command-line interface' },
+              { name: 'area: classifier', color: 'F9D0C4', description: 'Classification, taxonomy, and evaluation' },
+              { name: 'area: cache', color: 'FEF2C0', description: 'Indexing, cache, and persistence' },
+              { name: 'area: scanner', color: 'FBCA04', description: 'File discovery and scanning' },
+              { name: 'area: recovery', color: 'E6E6E6', description: 'Filesystem operations, safety, and recovery' },
+              { name: 'area: packaging', color: 'BFDADC', description: 'Builds, installers, and distribution' },
+              { name: 'area: ci', color: 'C2E0C6', description: 'CI, workflows, and automation' },
+              { name: 'area: docs', color: '0075CA', description: 'Documentation and project guidance' },
+              { name: 'status: open', color: 'FBCA04', description: 'Issue is currently open' },
+              { name: 'status: closed', color: '6F42C1', description: 'Issue is currently closed' },
+            ];
+
+            const existing = await github.paginate(github.rest.issues.listLabelsForRepo, {
+              owner, repo, per_page: 100,
+            });
+            const existingNames = new Set(existing.map(label => label.name));
+            for (const label of definitions) {
+              if (!existingNames.has(label.name)) {
+                try {
+                  await github.rest.issues.createLabel({ owner, repo, ...label });
+                  existingNames.add(label.name);
+                } catch (error) {
+                  if (error.status !== 422) throw error;
+                }
+              }
+            }
+
+            function classify(issue) {
+              const text = `${issue.title}\n${issue.body || ''}`.toLowerCase();
+              const labels = ['issue', 'automation'];
+              const has = (...terms) => terms.some(term => text.includes(term));
+
+              if (has('security', 'csrf', 'authorization', 'origin validation', 'capability boundary', 'privacy')) labels.push('type: security');
+              else if (has('benchmark', 'evaluation', 'human-labeled', 'human labeled', 'calibration', 'measure ', 'accuracy')) labels.push('type: research');
+              else if (has('release', 'pypi', 'publish', 'installer', 'packag', 'signing', 'notarization', 'distribution-name')) labels.push('type: release');
+              else if (has('test', 'coverage', 'regression', 'smoke', 'end-to-end', 'e2e')) labels.push('type: testing');
+              else if (has('document', 'readme', 'troubleshooting', 'positioning', 'explain')) labels.push('type: documentation');
+              else if (/^(fix|bug|regression|crash|prevent|remove stale|repair|harden)/.test(issue.title.toLowerCase())) labels.push('type: bug');
+              else if (has('dependency', 'maintenance', 'cleanup', 'version consistent', 'audit')) labels.push('type: maintenance');
+              else labels.push('type: feature');
+
+              if (has('desktop', 'tauri', 'sidecar', 'native window', 'installer')) labels.push('area: desktop');
+              if (has('browser', 'pagination', 'image grid', 'modal', 'frontend')) labels.push('area: browser');
+              if (has('cli', 'command-line', 'command line', 'vibesorter explain')) labels.push('area: cli');
+              if (has('classifier', 'vibe', 'taxonomy', 'label', 'evaluation', 'benchmark', 'calibration', 'media-type')) labels.push('area: classifier');
+              if (has('cache', 'sqlite', 'index', 'indexed', 'persistence', 'reindex')) labels.push('area: cache');
+              if (has('scanner', 'scan', 'symlink', 'file discovery', 'hidden folder', 'thumbnail')) labels.push('area: scanner');
+              if (has('rollback', 'recovery', 'filesystem', 'file operation', 'path validation', 'mutation')) labels.push('area: recovery');
+              if (has('package', 'pypi', 'release', 'installer', 'distribution', 'signing', 'notarization')) labels.push('area: packaging');
+              if (has('ci', 'workflow', 'github actions', 'dependency audit')) labels.push('area: ci');
+              if (has('document', 'readme', 'troubleshooting', 'privacy guide')) labels.push('area: docs');
+              return [...new Set(labels)];
+            }
+
+            async function processIssue(issue) {
+              if (issue.pull_request) return;
+              await github.rest.issues.addAssignees({
+                owner, repo, issue_number: issue.number, assignees: ['Ava-91'],
+              });
+              const labels = classify(issue);
+              labels.push(issue.state === 'closed' ? 'status: closed' : 'status: open');
+              const stale = issue.state === 'closed' ? 'status: open' : 'status: closed';
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: issue.number, name: stale,
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: issue.number, labels,
+              });
+              core.info(`Assigned Ava-91 and applied ${labels.join(', ')} to issue #${issue.number}.`);
+            }
+
+            if (context.eventName === 'workflow_dispatch') {
+              const issues = await github.paginate(github.rest.issues.listForRepo, {
+                owner, repo, state: 'all', per_page: 100,
+              });
+              for (const issue of issues) await processIssue(issue);
+              core.info(`Backfill complete: processed ${issues.filter(issue => !issue.pull_request).length} issues.`);
+            } else {
+              await processIssue(context.payload.issue);
+            }
