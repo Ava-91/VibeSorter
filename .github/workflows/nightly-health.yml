@@ -1,0 +1,97 @@
+name: Nightly health report
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-health-\${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  health:
+    name: Tests, classifier evaluation and performance report
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install project and development dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Run full test suite
+        run: python -m pytest -q
+      - name: Create report directory
+        run: mkdir -p artifacts
+      - name: Evaluate the human-labelled reference set when available
+        id: classifier
+        shell: bash
+        run: |
+          labels="datasets/evaluation/v1/labels.jsonl"
+          if [[ -s "$labels" ]]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+
+          records = [json.loads(line) for line in Path("datasets/evaluation/v1/labels.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+          missing = [record.get("path", "") for record in records if not Path(record.get("path", "")).expanduser().is_file()]
+          if missing:
+              raise SystemExit("Reference images are missing: " + ", ".join(missing[:10]))
+          if not records:
+              raise SystemExit("The reference labels file is empty.")
+          print(f"Validated {len(records)} human-labelled reference records.")
+          PY
+            vibesorter evaluate "$labels" --json > artifacts/classifier-evaluation.json
+            echo "result=completed" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=skipped-no-reference-set" >> "$GITHUB_OUTPUT"
+            echo "Classifier metrics were not produced: no human-labelled datasets/evaluation/v1/labels.jsonl exists yet." > artifacts/classifier-evaluation-status.txt
+          fi
+      - name: Run reproducible indexing benchmark
+        run: |
+          python scripts/benchmark_verified_reindex.py --files 250 --size 256 --workers 4 | tee artifacts/indexing-benchmark.txt
+      - name: Write nightly summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## VibeSorter nightly health"
+            echo
+            echo "- Commit: \`\${GITHUB_SHA}\`"
+            echo "- Classifier evaluation: \`\${{ steps.classifier.outputs.result || 'not-run' }}\`"
+            echo "- Performance: synthetic 250-image first/repeat indexing benchmark attached."
+            echo
+            if [[ -f artifacts/classifier-evaluation.json ]]; then
+              echo "### Classifier metrics"
+              python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("artifacts/classifier-evaluation.json").read_text(encoding="utf-8"))
+          metrics = report.get("metrics", {})
+          print(f"- Dataset images: {report.get('labelled_images', metrics.get('total', 'unknown'))}")
+          print(f"- Accuracy: {metrics.get('accuracy', 'unknown')}")
+          print(f"- Confidence error: {report.get('confidence_error', 'unknown')}")
+          PY
+            else
+              cat artifacts/classifier-evaluation-status.txt 2>/dev/null || true
+            fi
+            echo
+            echo "Performance timings are reported for trend tracking; no hard regression threshold is applied until a stable runner-specific baseline is established."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload nightly reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibesorter-nightly-\${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 30
