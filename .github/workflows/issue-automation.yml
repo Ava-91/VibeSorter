@@ -2,7 +2,7 @@ name: Issue automation
 
 on:
   issues:
-    types: [opened, reopened, edited, closed]
+    types: [opened, reopened, edited, closed, labeled]
   workflow_dispatch:
 
 permissions:
@@ -26,6 +26,7 @@ jobs:
             const definitions = [
               { name: 'issue', color: '1D76DB', description: 'Repository issue' },
               { name: 'automation', color: '0E8A16', description: 'Managed by repository automation' },
+              { name: 'automation:backfill', color: '5319E7', description: 'One-time trigger to assign and label every existing issue' },
               { name: 'type: bug', color: 'D73A4A', description: 'A defect or incorrect behavior' },
               { name: 'type: feature', color: 'A2EEEF', description: 'A new capability or enhancement' },
               { name: 'type: documentation', color: '0075CA', description: 'Documentation or wording work' },
@@ -117,12 +118,26 @@ jobs:
               core.info(`Assigned Ava-91 and applied ${labels.join(', ')} to issue #${issue.number}.`);
             }
 
-            if (context.eventName === 'workflow_dispatch') {
+            const isBackfill = context.eventName === 'workflow_dispatch' ||
+              (context.eventName === 'issues' &&
+               context.payload.action === 'labeled' &&
+               context.payload.label?.name === 'automation:backfill');
+
+            if (isBackfill) {
               const issues = await github.paginate(github.rest.issues.listForRepo, {
                 owner, repo, state: 'all', per_page: 100,
               });
               for (const issue of issues) await processIssue(issue);
+              if (context.payload.issue?.number) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner, repo, issue_number: context.payload.issue.number, name: 'automation:backfill',
+                  });
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                }
+              }
               core.info(`Backfill complete: processed ${issues.filter(issue => !issue.pull_request).length} issues.`);
-            } else {
+            } else if (context.eventName === 'issues') {
               await processIssue(context.payload.issue);
             }
