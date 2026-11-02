@@ -352,7 +352,7 @@ def _run_watch(args, parser) -> int:
 
     print(f"Monitoring {args.folder.expanduser()} every {args.interval:g} seconds. Press Ctrl+C to stop.")
     try:
-        monitor_folder(args.folder, interval=args.interval, workers=args.workers, on_update=report)
+        monitor_folder(args.folder, interval=args.interval, workers=args.workers, recursive=not args.no_recursive, on_update=report)
     except KeyboardInterrupt:
         print("\\nStopped monitoring. The local analysis cache is preserved.")
         return 0
