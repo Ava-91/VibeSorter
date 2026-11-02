@@ -1,0 +1,65 @@
+name: CI failure analyst
+
+on:
+  workflow_run:
+    workflows:
+      - VibeSorter CI
+      - Desktop
+      - Dependency audit
+      - Nightly health report
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  report:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize failed jobs on associated pull requests
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const prs = run.pull_requests || [];
+            const jobsResponse = await github.rest.actions.listJobsForWorkflowRun({
+              ...context.repo,
+              run_id: run.id,
+              per_page: 100
+            });
+            const failed = jobsResponse.data.jobs
+              .filter(job => job.conclusion === "failure")
+              .map(job => "- **" + job.name + "** — " + job.html_url);
+            const body = [
+              "<!-- ci-failure-summary:" + run.id + " -->",
+              "## CI failure report",
+              "",
+              "Workflow **" + run.name + "** failed for commit " + run.head_sha.slice(0, 12) + ".",
+              "",
+              failed.length ? failed.join("\\n") : "GitHub reported a failed run; no failed job details were returned.",
+              "",
+              "[Open workflow run](" + run.html_url + ")",
+              "",
+              "This is a diagnostic summary, not an automated fix."
+            ].join("\\n");
+            for (const pr of prs) {
+              const comments = await github.rest.issues.listComments({
+                ...context.repo,
+                issue_number: pr.number,
+                per_page: 100
+              });
+              if (comments.data.some(comment => comment.body?.includes("ci-failure-summary:" + run.id))) continue;
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: pr.number,
+                body
+              });
+            }
+            await core.summary
+              .addHeading("CI failure analyst")
+              .addRaw("Workflow: " + run.name + "\\n\\nFailed jobs: " + failed.length + "\\n\\n" + run.html_url)
+              .write();
