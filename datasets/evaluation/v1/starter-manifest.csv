@@ -1,0 +1,9 @@
+image_id,local_path,source_url,creator,artwork_creator,license,media_type,colors,temperature,saturation,brightness,vibes,reviewer,reviewed_at,split,sha256,notes
+lake-mountain,,,,Bonnie Moreland,CC0-1.0,photograph,blue|green,cool,,mid,dreamy|cozy,Ava-91,2026-11-02,,,Starter annotation; image bytes not yet vendored; no evaluation split assigned
+snowy-building,,,,Mrshaxas,,CC0-1.0,photograph,neutral|blue,cool,,mid,moody|minimal,Ava-91,2026-11-02,,,Starter annotation; image bytes not yet vendored; no evaluation split assigned
+architecture,,,,Ranjima np,,CC0-1.0,photograph,neutral,neutral,,mid,minimal|cinematic,Ava-91,2026-11-02,,,Starter annotation; image bytes not yet vendored; no evaluation split assigned
+macro-flower,,,,LorelMan,,CC0-1.0,photograph,green|pink,warm,,bright,soft|dreamy,Ava-91,2026-11-02,,,Starter annotation; image bytes not yet vendored; no evaluation split assigned
+renoir-still-life-flowers,,,,Solomon R. Guggenheim Foundation,Pierre-Auguste Renoir,CC0-1.0,illustration,red|green,warm,,mid,romantic|soft,Ava-91,2026-11-02,,,Artwork is a painting; illustration is the closest current taxonomy value; image bytes not yet vendored
+yellow-marigold,,,,The People's Internet,,CC0-1.0,photograph,yellow|green,warm,,bright,playful|soft,Ava-91,2026-11-02,,,Starter annotation; image bytes not yet vendored; no evaluation split assigned
+art-deco-building,,,,Markfree123,,CC0-1.0,photograph,neutral,neutral,,mid,retro|minimal,Ava-91,2026-11-02,,,Starter annotation; image bytes not yet vendored; no evaluation split assigned
+van-gogh-lilacs,,,,Membeth,Vincent van Gogh,CC0-1.0,illustration,purple|green,cool,,mid,dreamy|romantic,Ava-91,2026-11-02,,,Artwork is a painting; illustration is the closest current taxonomy value; image bytes not yet vendored
