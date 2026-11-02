@@ -23,9 +23,9 @@ def test_monitor_reindexes_when_snapshot_changes(monkeypatch: pytest.MonkeyPatch
     snapshots = iter([(("cover.jpg", 10, 1),), (("cover.jpg", 12, 2),)])
     calls: list[dict[str, int | str]] = []
 
-    monkeypatch.setattr(monitor, "_snapshot", lambda _folder: next(snapshots))
+    monkeypatch.setattr(monitor, "_snapshot", lambda _folder, *, recursive=True: next(snapshots))
 
-    def fake_index(_folder: str | Path, *, workers: int) -> dict[str, int | str]:
+    def fake_index(_folder: str | Path, *, workers: int, recursive: bool = True) -> dict[str, int | str]:
         assert workers >= 1
         result = {"total": len(calls) + 1, "analyzed": 1, "reused": 0, "skipped": 0, "removed": 0, "database": "cache.db"}
         calls.append(result)
