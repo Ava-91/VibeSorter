@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-health-\${{ github.ref }}
+  group: nightly-health-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -66,8 +66,8 @@ jobs:
           {
             echo "## VibeSorter nightly health"
             echo
-            echo "- Commit: \`\${GITHUB_SHA}\`"
-            echo "- Classifier evaluation: \`\${{ steps.classifier.outputs.result || 'not-run' }}\`"
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Classifier evaluation: ${{ steps.classifier.outputs.result || 'not-run' }}"
             echo "- Performance: synthetic 250-image first/repeat indexing benchmark attached."
             echo
             if [[ -f artifacts/classifier-evaluation.json ]]; then
@@ -91,7 +91,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vibesorter-nightly-\${{ github.run_id }}
+          name: vibesorter-nightly-${{ github.run_id }}
           path: artifacts/
           if-no-files-found: warn
           retention-days: 30
