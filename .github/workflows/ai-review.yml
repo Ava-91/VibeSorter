@@ -19,7 +19,7 @@ jobs:
         id: provider
         shell: bash
         env:
-          OPENAI_KEY: \${{ secrets.OPENAI_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
         run: |
           if [[ -n "$OPENAI_KEY" ]]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
@@ -31,8 +31,8 @@ jobs:
         if: steps.provider.outputs.enabled == 'true'
         uses: the-pr-agent/pr-agent@c6a076d6f9fb59029341b0b4f5662ed522d11589
         env:
-          OPENAI_KEY: \${{ secrets.OPENAI_KEY }}
-          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
           github_action_config.auto_improve: "false"
