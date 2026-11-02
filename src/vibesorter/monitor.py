@@ -12,11 +12,11 @@ from .scanner import find_images
 MonitorCallback = Callable[[dict[str, int | str]], None]
 
 
-def _snapshot(folder: str | Path) -> tuple[tuple[str, int, int], ...]:
+def _snapshot(folder: str | Path, *, recursive: bool = True) -> tuple[tuple[str, int, int], ...]:
     """Capture image paths and file identities without reading image contents."""
     return tuple(
         (str(path), stat.st_size, stat.st_mtime_ns)
-        for path in find_images(folder)
+        for path in find_images(folder, recursive=recursive)
         for stat in (path.stat(),)
     )
 
@@ -26,6 +26,7 @@ def monitor_folder(
     *,
     interval: float = 60.0,
     workers: int = 8,
+    recursive: bool = True,
     on_update: MonitorCallback | None = None,
     stop_event: Event | None = None,
 ) -> dict[str, int | str]:
@@ -42,8 +43,8 @@ def monitor_folder(
         raise ValueError("workers must be at least 1")
 
     root = Path(folder).expanduser()
-    previous = _snapshot(root)
-    result = index_folder(root, workers=workers)
+    previous = _snapshot(root, recursive=recursive)
+    result = index_folder(root, recursive=recursive, workers=workers)
     if on_update is not None:
         on_update(result)
 
@@ -54,7 +55,7 @@ def monitor_folder(
         else:
             time.sleep(interval)
 
-        current = _snapshot(root)
+        current = _snapshot(root, recursive=recursive)
         if current == previous:
             continue
 
