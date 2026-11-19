@@ -93,7 +93,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload nightly reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vibesorter-nightly-${{ github.run_id }}
           path: artifacts/
