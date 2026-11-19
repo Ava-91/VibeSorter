@@ -29,7 +29,7 @@ jobs:
           fi
       - name: Run PR-Agent review
         if: steps.provider.outputs.enabled == 'true'
-        uses: the-pr-agent/pr-agent@c6a076d6f9fb59029341b0b4f5662ed522d11589
+        uses: the-pr-agent/pr-agent@01fd2128f47a4db4dcfa1f2e04f331a138e0e1f4
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
