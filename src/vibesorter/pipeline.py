@@ -7,7 +7,13 @@ from pathlib import Path
 from .cache import AnalysisCache
 from .features import ImageFeatures, extract_features
 from .scanner import find_images
-from .vibes import VibeScore, score_vibes, select_vibes
+from .vibes import (
+    ConfidenceAssessment,
+    VibeScore,
+    assess_confidence,
+    score_vibes,
+    select_vibes,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,7 +24,17 @@ class AnalysisResult:
     scores: tuple[VibeScore, ...]
     cached: bool = False
     @property
+    def assessment(self) -> ConfidenceAssessment:
+        return assess_confidence(self.scores)
+
+    @property
+    def suggested_label(self) -> str | None:
+        return self.assessment.label
+
+    @property
     def vibes(self) -> tuple[VibeScore, ...]:
+        if self.assessment.label is None:
+            return ()
         return select_vibes(self.scores)
 
 def analyze_image(path: Path, *, cache: AnalysisCache | None = None, image_bytes: bytes | None = None) -> AnalysisResult:

@@ -59,7 +59,7 @@ def _matches_profile(profile: ImageProfile | None, query: ImageQuery) -> bool:
 def _matches(result: AnalysisResult, query: ImageQuery, profile: ImageProfile | None = None) -> bool:
     features = result.features
     if query.vibe is not None:
-        matching = result.scores if query.include_secondary_vibes else (result.best,)
+        matching = result.scores if query.include_secondary_vibes else ((result.best,) if result.suggested_label is not None else ())
         if not any(score.name == query.vibe and score.score >= query.min_score for score in matching):
             return False
     elif result.best.score < query.min_score:

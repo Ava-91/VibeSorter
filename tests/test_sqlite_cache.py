@@ -21,6 +21,11 @@ def test_sqlite_cache_round_trip(tmp_path):
     cache.close()
     assert loaded is not None
     assert loaded[1][0] == scores[0]
+    assert loaded[0].luminance_percentiles == features.luminance_percentiles
+    assert loaded[0].saturation_percentiles == features.saturation_percentiles
+    assert loaded[0].edge_density == features.edge_density
+    assert loaded[0].color_diversity == features.color_diversity
+    assert loaded[0].alpha_coverage == features.alpha_coverage
 
 
 def test_sqlite_cache_invalidates_changed_image(tmp_path):

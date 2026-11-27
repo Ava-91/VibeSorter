@@ -6,7 +6,7 @@ from .profile import AttributeValue, ImageProfile
 # The current heuristic makes automatic predictions for only these media types.
 # Illustration and collage remain valid taxonomy values for manually supplied profiles.
 AUTO_PREDICTED_MEDIA_TYPES = frozenset({"photograph", "screenshot", "graphic"})
-from .vibes import score_vibes
+from .vibes import assess_confidence, score_vibes
 
 
 def _clamp(value: float) -> float:
@@ -92,13 +92,13 @@ def _brightness(features: ImageFeatures) -> AttributeValue:
 
 def _vibes(features: ImageFeatures) -> tuple[AttributeValue, ...]:
     scores = score_vibes(features)
-    if not scores:
+    if assess_confidence(scores).label is None:
         return ()
     winner = scores[0].score
     return tuple(
         AttributeValue(score.name, score.score, "heuristic")
         for score in scores
-        if score.score >= 0.45 and winner - score.score <= 0.15
+        if score.score >= 0.55 and winner - score.score <= 0.08
     )
 
 

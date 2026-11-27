@@ -157,7 +157,7 @@ def test_browser_renders_image_detail_template_without_unescaped_fstring_braces(
     assert "const esc=v=>" in page
     assert "api/image-details?path=" in page
     assert "encodeURIComponent(path)" in page
-    assert "${esc(d.vibe||'Unclassified')}" in page
+    assert "${esc(d.vibe||'Needs review')}" in page
 
 
 def test_database_status_distinguishes_missing_empty_and_ready(tmp_path: Path):
@@ -183,3 +183,14 @@ def test_database_status_detects_unsupported_schema_and_corrupt_database(tmp_pat
     corrupt = tmp_path / "corrupt.db"
     corrupt.write_bytes(b"not a sqlite database")
     assert _database_status(corrupt)["state"] == "unreadable"
+
+
+def test_browser_exposes_confidence_and_local_personal_correction_controls():
+    page = render_page()
+    assert "Personal preferences" in page
+    assert "Mark correct" in page
+    assert "Mark incorrect" in page
+    assert "Partially correct" in page
+    assert "/api/corrections/undo" in page
+    assert "/api/corrections/clear" in page
+    assert "not probability" in page

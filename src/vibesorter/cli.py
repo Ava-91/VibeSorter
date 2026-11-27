@@ -137,9 +137,13 @@ def _analyze_folder(images, workers, *, vibe=None, min_score=0.0, max_text_likel
             cache.set(path, result.features, result.scores)
         if result.features.text_likelihood > max_text_likelihood: continue
         best = result.best
-        if best.score < min_score or (vibe is not None and best.name != vibe): continue
-        results.append(result); groups[best.name].append((path, best.score, result.features.text_likelihood))
-        if show_progress: print(f"[{index}/{len(images)}] {best.name:<18} {best.score:>5.0%}  {path}")
+        label = result.suggested_label
+        if best.score < min_score or (vibe is not None and label != vibe): continue
+        group = label or "Needs review"
+        results.append(result); groups[group].append((path, best.score, result.features.text_likelihood))
+        if show_progress:
+            status = f"{label} ({best.score:.0%})" if label else f"Needs review ({result.assessment.category})"
+            print(f"[{index}/{len(images)}] {status:<28} {path}")
     if cache is not None:
         cache.save()
     return groups, results, skipped
@@ -154,9 +158,12 @@ def _run_search(args, parser) -> int:
     if not cache_path.is_file(): parser.error(f"no analysis cache found at {cache_path}; run an incremental library analysis first")
     query = ImageQuery(vibe=args.vibe, min_score=args.min_score, max_text_likelihood=args.max_text_likelihood, path_contains=args.path_contains, min_brightness=args.min_brightness, max_brightness=args.max_brightness, min_saturation=args.min_saturation, max_saturation=args.max_saturation, min_contrast=args.min_contrast, max_contrast=args.max_contrast, limit=args.limit, include_secondary_vibes=args.include_secondary_vibes, media_type=args.media_type, colors=tuple(args.color), temperature=args.temperature, saturation=args.profile_saturation, brightness=args.profile_brightness, vibes=tuple(args.profile_vibes), max_vibe_margin=args.uncertain_margin)
     results = search_cache(AnalysisCache(cache_path), query)
-    if args.json: print(json.dumps({"count": len(results), "results": [{"path": str(r.path), "vibe": r.best.name, "score": round(r.best.score, 4), "text_likelihood": round(r.features.text_likelihood, 4), "brightness": round(r.features.brightness, 4), "saturation": round(r.features.saturation, 4), "contrast": round(r.features.contrast, 4)} for r in results]}, indent=2, ensure_ascii=False)); return 0
+    if args.json:
+        print(json.dumps({"count": len(results), "results": [{"path": str(r.path), "vibe": r.suggested_label, "top_ranked": r.best.name, "score": round(r.best.score, 4), "confidence_category": r.assessment.category, "reason": r.assessment.reason, "text_likelihood": round(r.features.text_likelihood, 4), "brightness": round(r.features.brightness, 4), "saturation": round(r.features.saturation, 4), "contrast": round(r.features.contrast, 4)} for r in results]}, indent=2, ensure_ascii=False)); return 0
     print(f"Found {len(results)} matching cached image(s).\n")
-    for result in results: print(f"{result.best.name:<18} {result.best.score:>5.0%}  {result.path}")
+    for result in results:
+        label = result.suggested_label or "Needs review"
+        print(f"{label:<18} {result.best.score:>5.0%} · {result.assessment.category:<9} {result.path}")
     print("\nSearch is read-only; no images were analyzed, created, moved, copied, renamed, deleted, or modified.")
     return 0
 
@@ -223,10 +230,15 @@ def _run_stats(args, parser) -> int:
 def _run_analyze(args, parser) -> int:
     try: result = analyze_image(args.image)
     except (OSError, ValueError, TypeError) as exc: parser.error(str(exc))
-    payload = {"path": str(result.path), "best": {"name": result.best.name, "score": round(result.best.score, 4)}, "text_likelihood": round(result.features.text_likelihood, 4), "scores": [{"name": score.name, "score": round(score.score, 4)} for score in result.scores]}
+    assessment = result.assessment
+    payload = {"path": str(result.path), "label": assessment.label, "top_ranked": {"name": result.best.name, "score": round(result.best.score, 4)}, "confidence_category": assessment.category, "ranking_signal": assessment.ranking_signal, "margin": assessment.margin, "reason": assessment.reason, "text_likelihood": round(result.features.text_likelihood, 4), "scores": [{"name": score.name, "score": round(score.score, 4)} for score in result.scores]}
     if args.json: print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
-        print(f"Best vibe: {result.best.name} ({result.best.score:.0%})"); print(f"Text/screenshot likelihood: {result.features.text_likelihood:.0%}"); print("\nRanking:")
+        print(f"Suggested label: {assessment.label or 'None — needs review'}")
+        print(f"Evidence: {assessment.category} · heuristic ranking signal {assessment.ranking_signal:.0%} (not a probability)")
+        print(f"Reason: {assessment.reason}")
+        print(f"Top-ranked raw score: {result.best.name} ({result.best.score:.0%})")
+        print(f"Text/screenshot likelihood: {result.features.text_likelihood:.0%}"); print("\nRanking:")
         for score in result.scores: print(f"  {score.name:<20} {score.score:.0%}")
     return 0
 

@@ -5,9 +5,27 @@ from dataclasses import dataclass
 from .features import ImageFeatures
 from .taxonomy import Vibe
 
-MIN_CONFIDENT_SCORE = 0.60
-MIN_CONFIDENT_MARGIN = 0.08
 CONFIDENCE_MARGIN_SCALE = 0.25
+
+@dataclass(frozen=True, slots=True)
+class ConfidenceThresholds:
+    """Single policy point for heuristic label abstention."""
+    possible_score: float = 0.55
+    possible_margin: float = 0.08
+    strong_score: float = 0.72
+    strong_margin: float = 0.16
+
+    def __post_init__(self) -> None:
+        values = (self.possible_score, self.possible_margin, self.strong_score, self.strong_margin)
+        if any(not 0.0 <= value <= 1.0 for value in values):
+            raise ValueError("confidence thresholds must be between 0 and 1")
+        if self.strong_score < self.possible_score or self.strong_margin < self.possible_margin:
+            raise ValueError("strong thresholds must be at least as strict as possible thresholds")
+
+
+DEFAULT_CONFIDENCE_THRESHOLDS = ConfidenceThresholds()
+MIN_CONFIDENT_SCORE = DEFAULT_CONFIDENCE_THRESHOLDS.possible_score
+MIN_CONFIDENT_MARGIN = DEFAULT_CONFIDENCE_THRESHOLDS.possible_margin
 DEFAULT_VIBE_THRESHOLD = 0.55
 DEFAULT_VIBE_MARGIN = 0.08
 
@@ -29,6 +47,16 @@ VIBE_MAX_SCORES = {
 class VibeScore:
     name: str
     score: float
+
+
+@dataclass(frozen=True, slots=True)
+class ConfidenceAssessment:
+    category: str
+    label: str | None
+    score: float
+    margin: float
+    ranking_signal: float
+    reason: str
 
 
 def _clamp(value: float) -> float:
@@ -198,8 +226,40 @@ def is_confident(
     return scores[0].score >= min_score and margin >= min_margin
 
 
+def assess_confidence(
+    scores: tuple[VibeScore, ...],
+    *,
+    thresholds: ConfidenceThresholds = DEFAULT_CONFIDENCE_THRESHOLDS,
+) -> ConfidenceAssessment:
+    """Separate raw scores, ranking margin, and user-facing confidence.
+
+    Scores and ranking_signal are heuristic signals, not calibrated probabilities.
+    A label is withheld when evidence is weak or the leading candidates are too close.
+    All category boundaries are configured in DEFAULT_CONFIDENCE_THRESHOLDS.
+    """
+    if not scores:
+        return ConfidenceAssessment("uncertain", None, 0.0, 0.0, 0.0, "No usable feature evidence was available.")
+    winner = scores[0].score
+    runner_up = scores[1].score if len(scores) > 1 else 0.0
+    margin = round(max(0.0, winner - runner_up), 4)
+    signal = confidence_score(scores)
+    if winner < thresholds.possible_score:
+        return ConfidenceAssessment("uncertain", None, winner, margin, signal, "The strongest heuristic score is below the minimum evidence threshold.")
+    if margin < thresholds.possible_margin:
+        return ConfidenceAssessment("uncertain", None, winner, margin, signal, "The leading labels are too close to distinguish reliably.")
+    if winner >= thresholds.strong_score and margin >= thresholds.strong_margin:
+        return ConfidenceAssessment("strong", scores[0].name, winner, margin, signal, "The leading score is strong and clearly separated from alternatives.")
+    return ConfidenceAssessment("possible", scores[0].name, winner, margin, signal, "There is a usable leading signal, but it is not strong enough for a strong label.")
+
+
 def classify(features: ImageFeatures) -> VibeScore:
+    """Return the top-ranked raw heuristic score, not a guaranteed label."""
     return score_vibes(features)[0]
+
+
+def classify_label(features: ImageFeatures) -> str | None:
+    """Return a label only when heuristic evidence clears abstention thresholds."""
+    return assess_confidence(score_vibes(features)).label
 
 
 CANONICAL_VIBES = tuple(item.value for item in Vibe)

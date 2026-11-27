@@ -74,3 +74,73 @@ def test_browser_end_to_end_with_real_local_images(tmp_path: Path):
         server.server_close()
         thread.join(timeout=3)
         assert not thread.is_alive()
+
+
+def test_browser_personal_corrections_are_local_persistent_undoable_and_clearable(tmp_path: Path):
+    import json
+    from urllib.request import Request, urlopen
+
+    image = tmp_path / "photo.png"
+    Image.new("RGB", (24, 24), (20, 40, 180)).save(image)
+    db = tmp_path / "analysis.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE images (path TEXT PRIMARY KEY, size INTEGER, mtime_ns INTEGER, features TEXT, scores TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO images VALUES (?, ?, ?, ?, ?)",
+            (
+                str(image), image.stat().st_size, image.stat().st_mtime_ns, "{}",
+                json.dumps([{"name": "retro", "score": 0.82}, {"name": "dreamy", "score": 0.60}]),
+            ),
+        )
+        conn.commit()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_app(db))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+
+    def post(route: str, payload: dict | None = None):
+        request = Request(
+            f"{base}{route}",
+            data=json.dumps(payload or {}).encode(),
+            headers={"Content-Type": "application/json", "Origin": base},
+            method="POST",
+        )
+        with urlopen(request, timeout=3) as response:
+            return json.load(response)
+
+    try:
+        saved = post("/api/corrections", {
+            "path": str(image), "suggested_label": "retro", "verdict": "incorrect"
+        })
+        assert saved["ok"] is True
+        assert saved["local_only"] is True
+
+        with urlopen(f"{base}/api/preferences", timeout=3) as response:
+            preferences = json.load(response)
+        assert preferences["local_only"] is True
+        assert len(preferences["corrections"]) == 1
+        assert preferences["adjustments"]["retro"] == -0.015
+
+        with urlopen(f"{base}/api/image-details?path={quote(str(image))}", timeout=3) as response:
+            detail = json.load(response)
+        assert detail["correction"]["verdict"] == "incorrect"
+        assert detail["personalized"] is True
+
+        assert post("/api/corrections/undo")["undone"] is True
+        with urlopen(f"{base}/api/preferences", timeout=3) as response:
+            assert json.load(response)["corrections"] == []
+
+        post("/api/corrections", {
+            "path": str(image), "suggested_label": "retro", "verdict": "correct"
+        })
+        assert post("/api/corrections/clear")["cleared"] == 1
+        with urlopen(f"{base}/api/preferences", timeout=3) as response:
+            assert json.load(response)["adjustments"] == {}
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
+        assert not thread.is_alive()

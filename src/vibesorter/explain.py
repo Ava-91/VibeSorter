@@ -20,14 +20,18 @@ class Explanation:
     feature_signals: dict[str, float]
     score_contributions: dict[str, dict[str, float]]
     features: dict
+    category: str = "uncertain"
+    label: str | None = None
+    reason: str = ""
+
     def to_dict(self) -> dict:
         data = asdict(self)
-        data['path'] = str(self.path)
-        data['features']['path'] = str(data['features']['path'])
+        data["path"] = str(self.path)
+        data["features"]["path"] = str(data["features"]["path"])
         return data
 
 def explain_image(path: str | Path) -> Explanation:
-    image = Path(path); features = extract_features(image); diagnostic = diagnose(features); scores = score_vibes(features); selected = select_vibes(scores)
+    image = Path(path); features = extract_features(image); diagnostic = diagnose(features); scores = score_vibes(features); selected = select_vibes(scores) if diagnostic.label is not None else ()
     signals = {
         'brightness': round(features.brightness, 4), 'saturation': round(features.saturation, 4), 'contrast': round(features.contrast, 4),
         'warm_ratio': round(features.warm_ratio, 4), 'cool_ratio': round(features.cool_ratio, 4), 'dark_ratio': round(features.dark_ratio, 4),
@@ -35,14 +39,17 @@ def explain_image(path: str | Path) -> Explanation:
         'center_brightness_delta': round(features.center_brightness_delta, 4), 'center_saturation_delta': round(features.center_saturation_delta, 4),
     }
     return Explanation(
-        image,
-        diagnostic.winner.name,
-        diagnostic.confidence,
-        diagnostic.margin,
-        diagnostic.ambiguous,
-        tuple((s.name, s.score) for s in selected),
-        tuple((s.name, s.score) for s in scores),
-        signals,
-        score_vibe_contributions(features),
-        asdict(features),
+        path=image,
+        winner=diagnostic.winner.name,
+        confidence=diagnostic.confidence,
+        margin=diagnostic.margin,
+        ambiguous=diagnostic.ambiguous,
+        selected_vibes=tuple((s.name, s.score) for s in selected),
+        scores=tuple((s.name, s.score) for s in scores),
+        feature_signals=signals,
+        score_contributions=score_vibe_contributions(features),
+        features=asdict(features),
+        category=diagnostic.category,
+        label=diagnostic.label,
+        reason=diagnostic.reason,
     )

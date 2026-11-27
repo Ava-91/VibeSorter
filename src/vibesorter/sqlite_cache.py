@@ -9,7 +9,7 @@ from .features import FEATURE_VERSION, ColorSample, ImageFeatures, SpatialRegion
 from .profile import ImageProfile
 from .vibes import VibeScore
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 DEFAULT_SQLITE_PATH = Path('.vibesorter') / 'analysis.db'
 
 
@@ -34,6 +34,11 @@ def _feature_from_dict(data: dict) -> ImageFeatures:
         regions=tuple(SpatialRegion(float(i['brightness']), float(i['saturation']), float(i.get('warm_ratio', 0.0)), float(i.get('cool_ratio', 0.0))) for i in data.get('regions', [])),
         center_brightness_delta=float(data.get('center_brightness_delta', 0.0)),
         center_saturation_delta=float(data.get('center_saturation_delta', 0.0)),
+        luminance_percentiles=tuple(float(v) for v in data.get('luminance_percentiles', ())),
+        saturation_percentiles=tuple(float(v) for v in data.get('saturation_percentiles', ())),
+        edge_density=float(data.get('edge_density', 0.0)),
+        color_diversity=float(data.get('color_diversity', 0.0)),
+        alpha_coverage=float(data.get('alpha_coverage', 1.0)),
     )
 
 
