@@ -237,11 +237,11 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
                 sum_h += hue_byte; sum_s += sat_byte; sum_v += value_byte
                 luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
                 sum_luminance += luminance; sum_luminance_sq += luminance * luminance
+                sat = sat_byte / 255.0; value = value_byte / 255.0; hue = hue_byte / 255.0
                 luminance_values.append(luminance / 255.0)
                 saturation_values.append(sat)
                 key = ((r // 16) * 16 + 8, (g // 16) * 16 + 8, (b // 16) * 16 + 8)
                 counts[key] = counts.get(key, 0) + 1
-                sat = sat_byte / 255.0; value = value_byte / 255.0; hue = hue_byte / 255.0
                 grayscale += sat < 0.18
                 dark += value < 0.25
                 light += value > 0.78
