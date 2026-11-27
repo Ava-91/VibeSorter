@@ -214,10 +214,12 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
                 rgba = ImageOps.exif_transpose(source).convert("RGBA")
                 alpha = rgba.getchannel("A")
                 alpha_coverage = sum(alpha.getdata()) / (255.0 * rgba.width * rgba.height)
-                # Transparent pixels can contain arbitrary hidden RGB values. Composite
-                # them over a neutral background before measuring visible image content.
-                background = Image.new("RGBA", rgba.size, (127, 127, 127, 255))
-                image = Image.alpha_composite(background, rgba).convert("RGB")
+                # Preserve RGB for partially transparent artwork, but neutralize fully
+                # transparent hidden pixel data so it cannot distort visible measurements.
+                image = rgba.convert("RGB")
+                transparent = alpha.point(lambda value: 255 if value == 0 else 0)
+                neutral = Image.new("RGB", rgba.size, (127, 127, 127))
+                image.paste(neutral, mask=transparent)
                 image.thumbnail(ANALYSIS_SIZE, Image.Resampling.LANCZOS)
             hsv_image = image.convert("HSV")
             rgb_pixels = image.getdata()
@@ -237,11 +239,11 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
                 sum_h += hue_byte; sum_s += sat_byte; sum_v += value_byte
                 luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
                 sum_luminance += luminance; sum_luminance_sq += luminance * luminance
+                sat = sat_byte / 255.0; value = value_byte / 255.0; hue = hue_byte / 255.0
                 luminance_values.append(luminance / 255.0)
                 saturation_values.append(sat)
                 key = ((r // 16) * 16 + 8, (g // 16) * 16 + 8, (b // 16) * 16 + 8)
                 counts[key] = counts.get(key, 0) + 1
-                sat = sat_byte / 255.0; value = value_byte / 255.0; hue = hue_byte / 255.0
                 grayscale += sat < 0.18
                 dark += value < 0.25
                 light += value > 0.78
