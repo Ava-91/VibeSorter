@@ -12,8 +12,8 @@ from .explain import explain_image
 from .indexer import index_folder
 from .label_sampling import sample_labels
 from .labeling import LabelSession, prepare_labeling
-from .learned import LearnedClassifier
 from .feedback import PersonalCorrectionStore
+from .learned import LearnedClassifier
 
 _NEW_COMMANDS = {"benchmark", "evaluate", "explain", "train", "index", "sample-labels", "label", "browser", "desktop", "corrections"}
 

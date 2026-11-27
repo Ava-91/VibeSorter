@@ -7,7 +7,13 @@ from pathlib import Path
 from .cache import AnalysisCache
 from .features import ImageFeatures, extract_features
 from .scanner import find_images
-from .vibes import ConfidenceAssessment, VibeScore, assess_confidence, score_vibes, select_vibes
+from .vibes import (
+    ConfidenceAssessment,
+    VibeScore,
+    assess_confidence,
+    score_vibes,
+    select_vibes,
+)
 
 
 @dataclass(frozen=True, slots=True)

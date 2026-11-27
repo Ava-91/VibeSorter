@@ -579,7 +579,7 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
             try:
                 data = json.loads(self.rfile.read(content_length) or b"{}")
                 if not isinstance(data, dict):
-                    raise ValueError("JSON request body must be an object")
+                    raise TypeError("JSON request body must be an object")
                 if path == "/api/label/undo":
                     self._json(200, {"undone": label_session.undo(), "labelled": label_session.labelled})
                     return
