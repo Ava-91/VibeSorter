@@ -15,18 +15,19 @@ class Explanation:
     confidence: float
     margin: float
     ambiguous: bool
-    category: str
-    label: str | None
-    reason: str
     selected_vibes: tuple[tuple[str, float], ...]
     scores: tuple[tuple[str, float], ...]
     feature_signals: dict[str, float]
     score_contributions: dict[str, dict[str, float]]
     features: dict
+    category: str = "uncertain"
+    label: str | None = None
+    reason: str = ""
+
     def to_dict(self) -> dict:
         data = asdict(self)
-        data['path'] = str(self.path)
-        data['features']['path'] = str(data['features']['path'])
+        data["path"] = str(self.path)
+        data["features"]["path"] = str(data["features"]["path"])
         return data
 
 def explain_image(path: str | Path) -> Explanation:
@@ -38,17 +39,17 @@ def explain_image(path: str | Path) -> Explanation:
         'center_brightness_delta': round(features.center_brightness_delta, 4), 'center_saturation_delta': round(features.center_saturation_delta, 4),
     }
     return Explanation(
-        image,
-        diagnostic.winner.name,
-        diagnostic.confidence,
-        diagnostic.margin,
-        diagnostic.ambiguous,
-        diagnostic.category,
-        diagnostic.label,
-        diagnostic.reason,
-        tuple((s.name, s.score) for s in selected),
-        tuple((s.name, s.score) for s in scores),
-        signals,
-        score_vibe_contributions(features),
-        asdict(features),
+        path=image,
+        winner=diagnostic.winner.name,
+        confidence=diagnostic.confidence,
+        margin=diagnostic.margin,
+        ambiguous=diagnostic.ambiguous,
+        selected_vibes=tuple((s.name, s.score) for s in selected),
+        scores=tuple((s.name, s.score) for s in scores),
+        feature_signals=signals,
+        score_contributions=score_vibe_contributions(features),
+        features=asdict(features),
+        category=diagnostic.category,
+        label=diagnostic.label,
+        reason=diagnostic.reason,
     )

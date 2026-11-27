@@ -157,7 +157,7 @@ def test_browser_renders_image_detail_template_without_unescaped_fstring_braces(
     assert "const esc=v=>" in page
     assert "api/image-details?path=" in page
     assert "encodeURIComponent(path)" in page
-    assert "${esc(d.vibe||'Unclassified')}" in page
+    assert "${esc(d.vibe||'Needs review')}" in page
 
 
 def test_database_status_distinguishes_missing_empty_and_ready(tmp_path: Path):

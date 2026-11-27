@@ -11,7 +11,11 @@ def test_explain_includes_selected_vibes_and_signals(tmp_path):
     Image.new('RGB', (32, 32), (20, 30, 70)).save(path)
     explanation = explain_image(path)
     assert explanation.winner
-    assert explanation.selected_vibes
+    assert explanation.category in {"strong", "possible", "uncertain"}
+    if explanation.label is None:
+        assert explanation.selected_vibes == ()
+    else:
+        assert explanation.selected_vibes
     assert 'brightness' in explanation.feature_signals
     assert 'center_brightness_delta' in explanation.feature_signals
     assert explanation.to_dict()['path'] == str(path)
