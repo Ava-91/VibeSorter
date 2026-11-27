@@ -9,10 +9,10 @@ from .benchmark import benchmark
 from .cli import main as legacy_main
 from .evaluation import evaluate_dataset, load_labels
 from .explain import explain_image
+from .feedback import PersonalCorrectionStore
 from .indexer import index_folder
 from .label_sampling import sample_labels
 from .labeling import LabelSession, prepare_labeling
-from .feedback import PersonalCorrectionStore
 from .learned import LearnedClassifier
 
 _NEW_COMMANDS = {"benchmark", "evaluate", "explain", "train", "index", "sample-labels", "label", "browser", "desktop", "corrections"}
