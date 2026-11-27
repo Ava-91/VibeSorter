@@ -126,3 +126,33 @@ def test_canonical_vibes_never_emit_compound_labels() -> None:
 
 def test_confidence_score_is_explicitly_not_a_probability() -> None:
     assert "not a calibrated probability" in (confidence_score.__doc__ or "")
+
+
+def test_vibe_scores_are_normalized_across_rule_sets() -> None:
+    features = ImageFeatures(
+        path=Path("normalization.png"),
+        average_rgb=(120, 100, 90),
+        average_hsv=(0.06, 0.25, 0.47),
+        brightness=0.47,
+        saturation=0.25,
+        contrast=0.32,
+        warm_ratio=0.35,
+        cool_ratio=0.12,
+        grayscale_ratio=0.22,
+        dark_ratio=0.18,
+        light_ratio=0.16,
+        text_likelihood=0.12,
+        colors=(),
+    )
+    scores = {item.name: item.score for item in score_vibes(features)}
+    contributions = score_vibe_contributions(features)
+
+    assert set(scores) == set(contributions)
+    assert all(0.0 <= score <= 1.0 for score in scores.values())
+    for name, values in contributions.items():
+        assert abs(sum(values.values()) - scores[name]) < 0.001
+
+
+def test_vibe_score_documentation_rejects_probability_interpretation() -> None:
+    assert "not probability" in (score_vibes.__doc__ or "")
+    assert "not probabilities" in (score_vibe_contributions.__doc__ or "")

@@ -8,8 +8,21 @@ from .taxonomy import Vibe
 MIN_CONFIDENT_SCORE = 0.60
 MIN_CONFIDENT_MARGIN = 0.08
 CONFIDENCE_MARGIN_SCALE = 0.25
-DEFAULT_VIBE_THRESHOLD = 0.45
-DEFAULT_VIBE_MARGIN = 0.10
+DEFAULT_VIBE_THRESHOLD = 0.55
+DEFAULT_VIBE_MARGIN = 0.08
+
+VIBE_MAX_SCORES = {
+    "retro": 0.80,
+    "dreamy": 0.78,
+    "soft": 0.80,
+    "moody": 0.86,
+    "minimal": 0.82,
+    "cozy": 0.86,
+    "cinematic": 0.80,
+    "playful": 0.84,
+    "edgy": 0.86,
+    "romantic": 0.78,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,16 +116,27 @@ def _score_components(features: ImageFeatures) -> dict[str, dict[str, float]]:
 
 
 def score_vibe_contributions(features: ImageFeatures) -> dict[str, dict[str, float]]:
-    return {
-        name: {feature: round(value, 4) for feature, value in components.items()}
-        for name, components in _score_components(features).items()
-    }
+    """Return normalized, weighted evidence for every canonical vibe.
+
+    Each contribution is divided by that vibe's maximum possible weighted
+    score. The resulting values remain heuristic evidence, not probabilities.
+    """
+    components = _score_components(features)
+    normalized: dict[str, dict[str, float]] = {}
+    for name, values in components.items():
+        maximum = VIBE_MAX_SCORES[name]
+        normalized[name] = {
+            feature: round(value / maximum, 4)
+            for feature, value in values.items()
+        }
+    return normalized
 
 
 def score_vibes(features: ImageFeatures) -> tuple[VibeScore, ...]:
-    components = _score_components(features)
+    """Rank canonical vibes by normalized heuristic evidence, not probability."""
+    contributions = score_vibe_contributions(features)
     scores = {
-        name: _clamp(sum(values.values())) for name, values in components.items()
+        name: _clamp(sum(values.values())) for name, values in contributions.items()
     }
     return tuple(
         sorted(
