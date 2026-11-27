@@ -13,8 +13,9 @@ from .indexer import index_folder
 from .label_sampling import sample_labels
 from .labeling import LabelSession, prepare_labeling
 from .learned import LearnedClassifier
+from .feedback import PersonalCorrectionStore
 
-_NEW_COMMANDS = {"benchmark", "evaluate", "explain", "train", "index", "sample-labels", "label", "browser", "desktop"}
+_NEW_COMMANDS = {"benchmark", "evaluate", "explain", "train", "index", "sample-labels", "label", "browser", "desktop", "corrections"}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -78,6 +79,13 @@ def _parser() -> argparse.ArgumentParser:
     command = subparsers.add_parser("desktop", help="Launch the local VibeSorter desktop shell.")
     command.add_argument("--db", type=Path, default=Path(".vibesorter/analysis.db"))
     command.add_argument("--port", type=int, default=8765)
+
+    command = subparsers.add_parser("corrections", help="Inspect, undo, or clear local personal corrections.")
+    command.add_argument("--db", type=Path, default=Path(".vibesorter/analysis.db"))
+    actions = command.add_mutually_exclusive_group()
+    actions.add_argument("--undo", action="store_true", help="Undo the most recent personal correction.")
+    actions.add_argument("--clear", action="store_true", help="Delete all local personal corrections and preferences.")
+    command.add_argument("--json", action="store_true")
     return parser
 
 
@@ -275,6 +283,30 @@ def _run_desktop(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_corrections(args: argparse.Namespace) -> int:
+    with PersonalCorrectionStore(args.db.expanduser()) as store:
+        if args.undo:
+            result = {"undone": store.undo_last()}
+        elif args.clear:
+            result = {"cleared": store.clear()}
+        else:
+            result = {"local_only": True, "corrections": store.list_corrections(), "adjustments": store.adjustments()}
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    elif args.undo:
+        print("Undid the latest correction." if result["undone"] else "No correction to undo.")
+    elif args.clear:
+        print(f"Cleared {result['cleared']} correction(s).")
+    else:
+        print(f"Local corrections: {len(result['corrections'])}")
+        for item in result["corrections"]:
+            corrected = f" → {item['corrected_label']}" if item["corrected_label"] else ""
+            print(f"  {item['verdict']}: {item['suggested_label']}{corrected} · {item['path']}")
+        print("Personal ranking adjustments: " + (", ".join(f"{name} {value:+.3f}" for name, value in result["adjustments"].items()) or "none"))
+        print("All records remain local to the selected SQLite database.")
+    return 0
+
+
 def main() -> int:
     argv = sys.argv[1:]
     if argv and argv[0] in _NEW_COMMANDS:
@@ -296,6 +328,8 @@ def main() -> int:
             return _run_label(args, parser)
         if args.command == "browser":
             return _run_browser(args, parser)
+        if args.command == "corrections":
+            return _run_corrections(args)
         return _run_desktop(args)
     if argv and argv[0] in {"--help", "-h"}:
         legacy_main()
@@ -309,5 +343,6 @@ def main() -> int:
         print("  label FOLDER      Review predictions in a local assisted-labeling browser.")
         print("  browser           Browse cached analysis in a local browser UI.")
         print("  desktop           Launch the local desktop shell.")
+        print("  corrections       Inspect, undo, or clear local personal corrections.")
         return 0
     return legacy_main()

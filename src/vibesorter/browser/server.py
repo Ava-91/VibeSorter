@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from PIL import Image
 
+from ..feedback import PersonalCorrectionStore, apply_personal_preferences
 from ..profile import ImageProfile
 from ..taxonomy import (
     ATTRIBUTE_FAMILIES,
@@ -25,7 +26,7 @@ from ..taxonomy import (
     Temperature,
     Vibe,
 )
-from ..vibes import VibeScore, confidence_score, is_confident
+from ..vibes import VibeScore, assess_confidence, confidence_score
 from .labeling_ui import render_label_page
 from .ui import render_page
 
@@ -84,12 +85,16 @@ def _normalize_row(row: sqlite3.Row, columns: dict[str, str]) -> dict:
     confidence = item.get(columns["confidence"]) if columns.get("confidence") else None
     scores = item.get(columns["scores"]) if columns.get("scores") else None
     parsed = _parse_scores(scores)
-    if parsed and (vibe is None or confidence is None):
-        vibe = vibe or parsed[0].name
+    assessment = assess_confidence(parsed) if parsed else None
+    if parsed:
+        vibe = assessment.label
         confidence = confidence if confidence is not None else confidence_score(parsed)
     item["path"] = str(path or "")
     item["vibe"] = vibe
     item["confidence"] = confidence
+    item["confidence_category"] = assessment.category if assessment else ("legacy" if vibe else "uncertain")
+    item["reason"] = assessment.reason if assessment else ("Legacy stored label; no raw score evidence is available." if vibe else "No usable feature evidence was available.")
+    item["top_ranked"] = parsed[0].name if parsed else vibe
     return item
 
 
@@ -161,6 +166,8 @@ def _query_rows(
         return [], 0
     limit = max(1, min(limit, MAX_LIMIT))
     offset = max(0, offset)
+    with PersonalCorrectionStore(db_path) as feedback:
+        personal_adjustments = feedback.adjustments()
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         _ensure_browser_indexes(conn)
@@ -264,6 +271,11 @@ def _query_rows(
             except (TypeError, ValueError, KeyError, json.JSONDecodeError):
                 profile = None
             item["profile"] = profile.to_dict() if profile else None
+            raw_scores = _parse_scores(item.get(columns.get("scores", ""))) if columns.get("scores") else ()
+            adjusted = apply_personal_preferences(raw_scores, personal_adjustments)
+            has_personal_adjustment = any(personal_adjustments.values())
+            item["personalized_vibe"] = adjusted[0].name if adjusted and has_personal_adjustment else None
+            item["personalized"] = bool(has_personal_adjustment and adjusted)
             matches.append(item)
         return matches, total
 
@@ -324,7 +336,30 @@ def _image_detail(db_path: Path, requested: str) -> dict | None:
             except (TypeError, json.JSONDecodeError):
                 pass
         profile = _profile_for(conn, item["path"])
-        return {"path": item["path"], "vibe": item.get("vibe"), "confidence": float(item["confidence"]) if isinstance(item.get("confidence"), (int, float)) else (confidence_score(scores) if scores else 0.0), "ambiguous": not is_confident(scores) if scores else None, "scores": [{"name": s.name, "score": s.score} for s in scores], "profile": profile.to_dict() if profile else None, "features": features, "file": {"exists": path.is_file(), "size": path.stat().st_size if path.is_file() else None}}
+        assessment = assess_confidence(scores) if scores else None
+        with PersonalCorrectionStore(db_path) as feedback:
+            adjustments = feedback.adjustments()
+            correction = feedback.get_for_path(path) if path.is_file() else None
+        personalized_scores = apply_personal_preferences(scores, adjustments)
+        personalized = bool(adjustments and personalized_scores)
+        return {
+            "path": item["path"],
+            "vibe": assessment.label if assessment else item.get("vibe"),
+            "top_ranked": scores[0].name if scores else item.get("vibe"),
+            "confidence": confidence_score(scores) if scores else (float(item["confidence"]) if isinstance(item.get("confidence"), (int, float)) else None),
+            "confidence_category": assessment.category if assessment else ("legacy" if item.get("vibe") else "uncertain"),
+            "reason": assessment.reason if assessment else ("Legacy stored label; no raw score evidence is available." if item.get("vibe") else "No usable feature evidence was available."),
+            "ambiguous": assessment.category == "uncertain" if assessment else None,
+            "margin": assessment.margin if assessment else None,
+            "scores": [{"name": s.name, "score": s.score} for s in scores],
+            "personalized_vibe": personalized_scores[0].name if personalized else None,
+            "personalized": personalized,
+            "personalized_scores": [{"name": s.name, "score": s.score} for s in personalized_scores] if personalized else [],
+            "correction": correction,
+            "profile": profile.to_dict() if profile else None,
+            "features": features,
+            "file": {"exists": path.is_file(), "size": path.stat().st_size if path.is_file() else None},
+        }
 
 
 def _thumbnail_path(image: Path, cache_root: Path, size: int = 480) -> Path:
@@ -456,6 +491,10 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
             if parsed.path == "/api/status":
                 self._json(200, _database_status(db))
                 return
+            if parsed.path == "/api/preferences":
+                with PersonalCorrectionStore(db) as feedback:
+                    self._json(200, {"local_only": True, "adjustments": feedback.adjustments(), "corrections": feedback.list_corrections()})
+                return
             if parsed.path == "/api/attributes":
                 values = {
                     "media_type": [item.value for item in MediaType],
@@ -529,25 +568,58 @@ def create_app(db_path: str | Path = ".vibesorter/analysis.db", label_session=No
                 self._json(413, {"error": "request body exceeds 64 KiB limit"})
                 return
             path = urlparse(self.path).path
-            if label_session is None or path not in {"/api/label/decision", "/api/label/undo"}:
-                self._json(404, {"error": "Labeling session not configured" if label_session is None else "Not found"})
+            label_paths = {"/api/label/decision", "/api/label/undo"}
+            correction_paths = {"/api/corrections", "/api/corrections/undo", "/api/corrections/clear"}
+            if path in label_paths and label_session is None:
+                self._json(404, {"error": "Labeling session not configured"})
                 return
-            if path == "/api/label/undo":
-                self._json(200, {"undone": label_session.undo(), "labelled": label_session.labelled})
+            if path not in label_paths | correction_paths:
+                self._json(404, {"error": "Not found"})
                 return
             try:
                 data = json.loads(self.rfile.read(content_length) or b"{}")
+                if not isinstance(data, dict):
+                    raise ValueError("JSON request body must be an object")
+                if path == "/api/label/undo":
+                    self._json(200, {"undone": label_session.undo(), "labelled": label_session.labelled})
+                    return
+                if path == "/api/label/decision":
+                    requested = str(data["path"])
+                    label = data.get("label")
+                    skip = bool(data.get("skip", False))
+                    candidate = next((item for item in label_session.remaining if str(item.path.resolve()) == str(Path(requested).expanduser().resolve())), None)
+                    if candidate is None:
+                        raise ValueError("unknown or already-labelled image")
+                    label_session.decide(candidate, None if skip else str(label))
+                    self._json(200, {"ok": True, "labelled": label_session.labelled, "remaining": len(label_session.remaining)})
+                    return
+                if path == "/api/corrections/undo":
+                    with PersonalCorrectionStore(db) as feedback:
+                        undone = feedback.undo_last()
+                    self._json(200, {"undone": undone})
+                    return
+                if path == "/api/corrections/clear":
+                    with PersonalCorrectionStore(db) as feedback:
+                        cleared = feedback.clear()
+                    self._json(200, {"cleared": cleared})
+                    return
                 requested = str(data["path"])
-                label = data.get("label")
-                skip = bool(data.get("skip", False))
-                candidate = next((item for item in label_session.remaining if str(item.path.resolve()) == str(Path(requested).expanduser().resolve())), None)
-                if candidate is None:
-                    raise ValueError("unknown or already-labelled image")
-                label_session.decide(candidate, None if skip else str(label))
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                image = _image_path(db, requested)
+                if image is None:
+                    raise ValueError("image is not present in the local analysis database")
+                detail = _image_detail(db, requested)
+                if detail is None:
+                    raise ValueError("image analysis is unavailable")
+                suggested = str(data.get("suggested_label") or detail.get("top_ranked") or "")
+                verdict = str(data.get("verdict") or "")
+                corrected = data.get("corrected_label")
+                with PersonalCorrectionStore(db) as feedback:
+                    record = feedback.record(image, suggested, verdict, str(corrected) if corrected else None)
+                    adjustments = feedback.adjustments()
+                self._json(200, {"ok": True, "correction": record, "adjustments": adjustments, "local_only": True})
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError, OSError) as exc:
                 self._json(400, {"error": str(exc)})
                 return
-            self._json(200, {"ok": True, "labelled": label_session.labelled, "remaining": len(label_session.remaining)})
 
         def log_message(self, *_args) -> None:
             return
