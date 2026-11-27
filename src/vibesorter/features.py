@@ -214,10 +214,12 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
                 rgba = ImageOps.exif_transpose(source).convert("RGBA")
                 alpha = rgba.getchannel("A")
                 alpha_coverage = sum(alpha.getdata()) / (255.0 * rgba.width * rgba.height)
-                # Transparent pixels can contain arbitrary hidden RGB values. Composite
-                # them over a neutral background before measuring visible image content.
-                background = Image.new("RGBA", rgba.size, (127, 127, 127, 255))
-                image = Image.alpha_composite(background, rgba).convert("RGB")
+                # Keep the original RGB of partially transparent artwork for backwards
+                # compatibility, but neutralize fully transparent hidden pixel data.
+                image = rgba.convert("RGB")
+                transparent = alpha.point(lambda value: 255 if value == 0 else 0)
+                neutral = Image.new("RGB", rgba.size, (127, 127, 127))
+                image.paste(neutral, mask=transparent)
                 image.thumbnail(ANALYSIS_SIZE, Image.Resampling.LANCZOS)
             hsv_image = image.convert("HSV")
             rgb_pixels = image.getdata()
