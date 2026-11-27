@@ -9,7 +9,7 @@ from pathlib import Path
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 ANALYSIS_SIZE = (64, 64)
-FEATURE_VERSION = 2
+FEATURE_VERSION = 3
 PALETTE_SIZE = 6
 MAX_IMAGE_PIXELS = int(Image.MAX_IMAGE_PIXELS or 89_478_485)
 
@@ -46,6 +46,47 @@ class ImageFeatures:
     regions: tuple[SpatialRegion, ...] = ()
     center_brightness_delta: float = 0.0
     center_saturation_delta: float = 0.0
+    luminance_percentiles: tuple[float, ...] = ()
+    saturation_percentiles: tuple[float, ...] = ()
+    edge_density: float = 0.0
+    color_diversity: float = 0.0
+    alpha_coverage: float = 1.0
+
+
+def _percentiles(values: list[float]) -> tuple[float, ...]:
+    """Return deterministic P10/P25/P50/P75/P90 summaries for bounded samples."""
+    if not values:
+        return (0.0, 0.0, 0.0, 0.0, 0.0)
+    ordered = sorted(values)
+    result = []
+    for fraction in (0.10, 0.25, 0.50, 0.75, 0.90):
+        position = fraction * (len(ordered) - 1)
+        lower = int(position)
+        upper = min(lower + 1, len(ordered) - 1)
+        weight = position - lower
+        result.append(round(ordered[lower] * (1.0 - weight) + ordered[upper] * weight, 4))
+    return tuple(result)
+
+
+def _edge_density(image: Image.Image) -> float:
+    """Fraction of neighboring luminance pairs with a visible local change."""
+    gray = image.convert("L")
+    width, height = gray.size
+    pixels = list(gray.getdata())
+    if width < 2 or height < 2:
+        return 0.0
+    edges = total = 0
+    for y in range(height):
+        row = y * width
+        for x in range(width):
+            current = pixels[row + x]
+            if x + 1 < width:
+                total += 1
+                edges += abs(current - pixels[row + x + 1]) >= 24
+            if y + 1 < height:
+                total += 1
+                edges += abs(current - pixels[row + width]) >= 24
+    return round(edges / total, 4) if total else 0.0
 
 
 def _text_likelihood(image: Image.Image, grayscale_ratio: float, contrast: float) -> float:
@@ -170,7 +211,13 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
                     )
                 # Animated/multi-page formats are analyzed using their first frame.
                 source.seek(0)
-                image = ImageOps.exif_transpose(source).convert("RGB")
+                rgba = ImageOps.exif_transpose(source).convert("RGBA")
+                alpha = rgba.getchannel("A")
+                alpha_coverage = sum(alpha.getdata()) / (255.0 * rgba.width * rgba.height)
+                # Transparent pixels can contain arbitrary hidden RGB values. Composite
+                # them over a neutral background before measuring visible image content.
+                background = Image.new("RGBA", rgba.size, (127, 127, 127, 255))
+                image = Image.alpha_composite(background, rgba).convert("RGB")
                 image.thumbnail(ANALYSIS_SIZE, Image.Resampling.LANCZOS)
             hsv_image = image.convert("HSV")
             rgb_pixels = image.getdata()
@@ -180,6 +227,8 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
             sum_r = sum_g = sum_b = 0
             sum_h = sum_s = sum_v = 0
             sum_luminance = sum_luminance_sq = 0.0
+            luminance_values: list[float] = []
+            saturation_values: list[float] = []
             warm = cool = grayscale = dark = light = count = 0
 
             for (r, g, b), (hue_byte, sat_byte, value_byte) in zip(rgb_pixels, hsv_pixels):
@@ -188,6 +237,8 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
                 sum_h += hue_byte; sum_s += sat_byte; sum_v += value_byte
                 luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
                 sum_luminance += luminance; sum_luminance_sq += luminance * luminance
+                luminance_values.append(luminance / 255.0)
+                saturation_values.append(sat)
                 key = ((r // 16) * 16 + 8, (g // 16) * 16 + 8, (b // 16) * 16 + 8)
                 counts[key] = counts.get(key, 0) + 1
                 sat = sat_byte / 255.0; value = value_byte / 255.0; hue = hue_byte / 255.0
@@ -213,7 +264,19 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
     variance = max(0.0, (sum_luminance_sq / count) - mean_luminance * mean_luminance)
     contrast = min(1.0, math.sqrt(variance) / 255.0)
     grayscale_ratio = grayscale / count
-    top = sorted(counts.items(), key=lambda item: item[1], reverse=True)[:PALETTE_SIZE]
+    ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)
+    top = ranked[:PALETTE_SIZE]
+    # Preserve a meaningful vivid accent even when a large neutral background
+    # dominates the frequency ranking. Tiny one-pixel noise is not promoted.
+    vivid = [
+        item for item in ranked
+        if item[1] / count >= 0.01
+        and max(item[0]) - min(item[0]) >= 72
+    ]
+    if vivid:
+        accent = max(vivid, key=lambda item: (item[1] * (max(item[0]) - min(item[0])), item[1]))
+        if accent not in top:
+            top = top[: PALETTE_SIZE - 1] + [accent]
     colors = tuple(ColorSample(rgb=color, proportion=amount / count) for color, amount in top)
     regions = _region_features(image)
     center_brightness_delta, center_saturation_delta = _center_deltas(image)
@@ -235,4 +298,9 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
         regions=regions,
         center_brightness_delta=center_brightness_delta,
         center_saturation_delta=center_saturation_delta,
+        luminance_percentiles=_percentiles(luminance_values),
+        saturation_percentiles=_percentiles(saturation_values),
+        edge_density=_edge_density(image),
+        color_diversity=round(min(1.0, len(counts) / 32.0), 4),
+        alpha_coverage=round(alpha_coverage, 4),
     )
