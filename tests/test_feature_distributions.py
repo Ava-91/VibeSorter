@@ -18,7 +18,7 @@ def test_uniform_image_has_stable_distribution_and_no_edges(tmp_path: Path):
     assert len(features.saturation_percentiles) == 5
     assert len(set(features.luminance_percentiles)) == 1
     assert features.edge_density == 0.0
-    assert features.color_diversity == 1 / 32
+    assert features.color_diversity == round(1 / 32, 4)
     assert features.alpha_coverage == 1.0
 
 
