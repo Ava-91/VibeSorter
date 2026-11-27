@@ -146,7 +146,10 @@ def _run_explain(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
         return 0
     print(f"Image: {data['path']}")
     print(f"Winner: {data['winner']}")
-    print(f"Confidence: {data['confidence']:.0%}")
+    print(f"Heuristic ranking signal: {data['confidence']:.0%} (not a probability)")
+    print(f"Confidence category: {data['category']}")
+    print(f"Suggested label: {data['label'] or 'None — needs review'}")
+    print(f"Reason: {data['reason']}")
     print(f"Margin: {data['margin']:.4f}")
     print(f"Ambiguous: {'yes' if data['ambiguous'] else 'no'}")
     print("\nSelected vibes:")

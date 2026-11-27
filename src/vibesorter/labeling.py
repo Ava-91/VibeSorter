@@ -6,13 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .indexer import index_folder
-from .vibes import VIBES, VibeScore, confidence_score, is_confident
+from .vibes import VIBES, VibeScore, assess_confidence, confidence_score
 
 
 @dataclass(frozen=True, slots=True)
 class LabelCandidate:
     path: Path
-    prediction: str
+    prediction: str | None
     confidence: float
     ambiguous: bool
     scores: tuple[VibeScore, ...]
@@ -22,6 +22,8 @@ class LabelCandidate:
             "path": str(self.path),
             "prediction": self.prediction,
             "confidence": self.confidence,
+            "confidence_category": assess_confidence(self.scores).category,
+            "reason": assess_confidence(self.scores).reason,
             "ambiguous": self.ambiguous,
             "scores": [{"name": score.name, "score": score.score} for score in self.scores],
         }
@@ -120,9 +122,9 @@ def build_candidates(
         candidates.append(
             LabelCandidate(
                 path=path.resolve(),
-                prediction=scores[0].name,
+                prediction=assess_confidence(scores).label,
                 confidence=confidence_score(scores),
-                ambiguous=not is_confident(scores),
+                ambiguous=assess_confidence(scores).category == "uncertain",
                 scores=scores,
             )
         )

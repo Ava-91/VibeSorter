@@ -9,7 +9,7 @@ from .features import FEATURE_VERSION, ColorSample, ImageFeatures, SpatialRegion
 from .profile import ImageProfile
 from .vibes import VibeScore
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 DEFAULT_SQLITE_PATH = Path('.vibesorter') / 'analysis.db'
 
 

@@ -53,7 +53,8 @@ def build_proposal(
     operations: list[MoveOperation] = []
     for index, result in enumerate(ordered, start=1):
         filename = _safe_name(result.path.name)
-        destination = root / _safe_name(result.best.name) / filename
+        label = result.suggested_label or "Needs review"
+        destination = root / _safe_name(label) / filename
         key = destination.as_posix().casefold()
         stem, suffix = destination.stem, destination.suffix
         counter = 2
@@ -69,7 +70,7 @@ def build_proposal(
                 # never depend on the working directory they are later run from.
                 os.path.abspath(Path(result.path).expanduser()),
                 str(destination),
-                result.best.name,
+                label,
                 round(result.best.score, 6),
                 round(_confidence(result), 6),
                 round(result.features.text_likelihood, 6),

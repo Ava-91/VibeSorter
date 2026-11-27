@@ -15,6 +15,9 @@ class Explanation:
     confidence: float
     margin: float
     ambiguous: bool
+    category: str
+    label: str | None
+    reason: str
     selected_vibes: tuple[tuple[str, float], ...]
     scores: tuple[tuple[str, float], ...]
     feature_signals: dict[str, float]
@@ -27,7 +30,7 @@ class Explanation:
         return data
 
 def explain_image(path: str | Path) -> Explanation:
-    image = Path(path); features = extract_features(image); diagnostic = diagnose(features); scores = score_vibes(features); selected = select_vibes(scores)
+    image = Path(path); features = extract_features(image); diagnostic = diagnose(features); scores = score_vibes(features); selected = select_vibes(scores) if diagnostic.label is not None else ()
     signals = {
         'brightness': round(features.brightness, 4), 'saturation': round(features.saturation, 4), 'contrast': round(features.contrast, 4),
         'warm_ratio': round(features.warm_ratio, 4), 'cool_ratio': round(features.cool_ratio, 4), 'dark_ratio': round(features.dark_ratio, 4),
@@ -40,6 +43,9 @@ def explain_image(path: str | Path) -> Explanation:
         diagnostic.confidence,
         diagnostic.margin,
         diagnostic.ambiguous,
+        diagnostic.category,
+        diagnostic.label,
+        diagnostic.reason,
         tuple((s.name, s.score) for s in selected),
         tuple((s.name, s.score) for s in scores),
         signals,

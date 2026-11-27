@@ -212,6 +212,7 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
                 # Animated/multi-page formats are analyzed using their first frame.
                 source.seek(0)
                 rgba = ImageOps.exif_transpose(source).convert("RGBA")
+                rgba.thumbnail(ANALYSIS_SIZE, Image.Resampling.LANCZOS)
                 alpha = rgba.getchannel("A")
                 alpha_coverage = sum(alpha.getdata()) / (255.0 * rgba.width * rgba.height)
                 # Preserve RGB for partially transparent artwork, but neutralize fully
@@ -220,7 +221,6 @@ def extract_features(path: str | Path, *, image_bytes: bytes | None = None) -> I
                 transparent = alpha.point(lambda value: 255 if value == 0 else 0)
                 neutral = Image.new("RGB", rgba.size, (127, 127, 127))
                 image.paste(neutral, mask=transparent)
-                image.thumbnail(ANALYSIS_SIZE, Image.Resampling.LANCZOS)
             hsv_image = image.convert("HSV")
             rgb_pixels = image.getdata()
             hsv_pixels = hsv_image.getdata()

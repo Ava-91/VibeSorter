@@ -1,6 +1,6 @@
 # Image feature measurements (version 3)
 
-All image analysis uses a bounded 64×64 thumbnail. EXIF orientation is applied first. RGBA images retain their original RGB values for partially transparent artwork (preserving existing palette behavior), while fully transparent pixels are neutralized so hidden RGB values cannot distort visible-color measurements. `alpha_coverage` separately records mean source opacity.
+All image analysis uses a bounded 64×64 thumbnail. EXIF orientation is applied first. RGBA images retain their original RGB values for partially transparent artwork (preserving existing palette behavior), while fully transparent pixels are neutralized so hidden RGB values cannot distort visible-color measurements. `alpha_coverage` separately records mean opacity on the bounded analysis thumbnail.
 
 ## Distributions
 

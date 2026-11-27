@@ -294,7 +294,7 @@ def _vibe_summary(db_path: Path) -> list[dict]:
         elif columns.get("scores"):
             for (raw,) in conn.execute(f"SELECT {columns['scores']} FROM {table}"):
                 scores = _parse_scores(raw)
-                label = scores[0].name if scores else "Unclassified"
+                label = (assess_confidence(scores).label or "Needs review") if scores else "Unclassified"
                 counts[label] += 1
                 if scores:
                     totals[label] += confidence_score(scores)
